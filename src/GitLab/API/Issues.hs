@@ -19,6 +19,11 @@ module GitLab.API.Issues
     IssueState (..),
     projectIssues,
     projectIssues',
+    issueStatisticsUser,
+    issueStatisticsGroup,
+    issueStatisticsGroup',
+    issueStatisticsProject,
+    issueStatisticsProject',
     userIssues,
     newIssue,
     newIssue',
@@ -132,7 +137,7 @@ projectIssues' ::
   Int ->
   -- | filter the issues, see https://docs.gitlab.com/ee/api/issues.html#list-issues
   IssueFilters ->
-  -- the GitLab issues
+  -- | the GitLab issues
   GitLab (Either Status [Issue])
 projectIssues' projectId filters =
   gitlabWithAttrs path attrs
@@ -143,7 +148,84 @@ projectIssues' projectId filters =
         "&scope=all"
           <> concat (showIssueFilters filters)
 
--- gitlabReq path "&state=opened"
+-- | Gets issues count statistics on all issues the authenticated user has access to.
+issueStatisticsUser ::
+  -- | filter the issues, see https://docs.gitlab.com/ee/api/issues_statistics.html#get-issues-statistics
+  IssueFilters ->
+  -- | the issue statistics
+  GitLab IssueStatistics
+issueStatisticsUser filters =
+  gitlabWithAttrsOneUnsafe path attrs
+  where
+    path = "/issues_statistics"
+    attrs =
+      T.pack $
+        "&scope=all"
+          <> concat (showIssueFilters filters)
+
+-- | Gets issues count statistics for a given group.
+issueStatisticsGroup ::
+  -- | the group
+  Group ->
+  -- | filter the issues, see https://docs.gitlab.com/ee/api/issues_statistics.html#get-issues-statistics
+  IssueFilters ->
+  -- | the issue statistics
+  GitLab IssueStatistics
+issueStatisticsGroup group filters = do
+  result <- issueStatisticsGroup' (group_id group) filters
+  case result of
+    Left _s -> error "issueStatisticsGroup error"
+    Right Nothing -> error "issueStatisticsGroup error"
+    Right (Just stats) -> return stats
+
+-- | Gets issues count statistics for a given group.
+issueStatisticsGroup' ::
+  -- | the group ID
+  Int ->
+  -- | filter the issues, see https://docs.gitlab.com/ee/api/issues_statistics.html#get-issues-statistics
+  IssueFilters ->
+  -- | the issue statistics
+  GitLab (Either Status (Maybe IssueStatistics))
+issueStatisticsGroup' groupId filters =
+  gitlabWithAttrsOne path attrs
+  where
+    path = T.pack $ "/groups/" <> show groupId <> "/issues_statistics"
+    attrs =
+      T.pack $
+        "&scope=all"
+          <> concat (showIssueFilters filters)
+
+-- | Gets issues count statistics for a given group.
+issueStatisticsProject ::
+  -- | the project
+  Project ->
+  -- | filter the issues, see https://docs.gitlab.com/ee/api/issues_statistics.html#get-issues-statistics
+  IssueFilters ->
+  -- | the issue statistics
+  GitLab IssueStatistics
+issueStatisticsProject proj filters = do
+  result <- issueStatisticsGroup' (project_id proj) filters
+  case result of
+    Left _s -> error "issueStatisticsProject error"
+    Right Nothing -> error "issueStatisticsProject error"
+    Right (Just stats) -> return stats
+
+-- | Gets issues count statistics for a given project.
+issueStatisticsProject' ::
+  -- | the project ID
+  Int ->
+  -- | filter the issues, see https://docs.gitlab.com/ee/api/issues_statistics.html#get-issues-statistics
+  IssueFilters ->
+  -- | the issue statistics
+  GitLab (Either Status (Maybe IssueStatistics))
+issueStatisticsProject' projId filters =
+  gitlabWithAttrsOne path attrs
+  where
+    path = T.pack $ "/projects/" <> show projId <> "/issues_statistics"
+    attrs =
+      T.pack $
+        "&scope=all"
+          <> concat (showIssueFilters filters)
 
 -- | gets all issues create by a user.
 userIssues ::

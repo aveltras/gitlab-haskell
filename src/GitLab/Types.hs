@@ -54,6 +54,8 @@ module GitLab.Types
     URL,
     EditIssueReq (..),
     Discussion (..),
+    IssueStatistics (..),
+    IssueCounts (..),
   )
 where
 
@@ -700,6 +702,23 @@ data Note = Note
   }
   deriving (Generic, Show)
 
+newtype IssueStatistics = IssueStatistics
+  { issues_statistics :: IssueStats
+  }
+  deriving (Generic, Show)
+
+newtype IssueStats = IssueStats
+  { issues_counts :: IssueCounts
+  }
+  deriving (Generic, Show)
+
+data IssueCounts = IssueCounts
+  { issues_all :: Int,
+    issues_closed :: Int,
+    issues_opened :: Int
+  }
+  deriving (Generic, Show)
+
 -----------------------------
 -- JSON GitLab parsers below
 -----------------------------
@@ -885,6 +904,14 @@ releasePrefix :: String -> String
 releasePrefix "release_tag_name" = "tag_name"
 releasePrefix "release_description" = "description"
 releasePrefix s = s
+
+issueStatsPrefix :: String -> String
+issueStatsPrefix "issues_all" = "all"
+issueStatsPrefix "issues_closed" = "closed"
+issueStatsPrefix "issues_opened" = "opened"
+issueStatsPrefix "issues_statistics" = "statistics"
+issueStatsPrefix "issues_counts" = "counts"
+issueStatsPrefix s = s
 
 instance FromJSON TimeStats where
   parseJSON =
@@ -1115,5 +1142,29 @@ instance FromJSON Note where
     genericParseJSON
       ( defaultOptions
           { fieldLabelModifier = bodyNoPrefix
+          }
+      )
+
+instance FromJSON IssueCounts where
+  parseJSON =
+    genericParseJSON
+      ( defaultOptions
+          { fieldLabelModifier = issueStatsPrefix
+          }
+      )
+
+instance FromJSON IssueStats where
+  parseJSON =
+    genericParseJSON
+      ( defaultOptions
+          { fieldLabelModifier = issueStatsPrefix
+          }
+      )
+
+instance FromJSON IssueStatistics where
+  parseJSON =
+    genericParseJSON
+      ( defaultOptions
+          { fieldLabelModifier = issueStatsPrefix
           }
       )
