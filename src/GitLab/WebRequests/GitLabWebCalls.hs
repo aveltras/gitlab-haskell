@@ -10,8 +10,7 @@ module GitLab.WebRequests.GitLabWebCalls
     gitlabOne,
     -- gitlabOneIO,
     gitlabWithAttrsOne,
-    -- not currently used.
-    -- gitlabWithAttrsOneUnsafe,
+    gitlabWithAttrsOneUnsafe,
     gitlabPost,
     gitlabPut,
     gitlabDelete,
@@ -71,9 +70,9 @@ gitlabPost urlPath dataBody = do
         ( case parseBSOne (responseBody resp) of
             Just x -> Right (Just x)
             Nothing -> Right Nothing
-            -- Nothing ->
-            --   Left $
-            --     mkStatus 409 "unable to parse POST response"
+          -- Nothing ->
+          --   Left $
+          --     mkStatus 409 "unable to parse POST response"
         )
     else return (Left (responseStatus resp))
 
@@ -288,10 +287,13 @@ gitlabWithAttrsUnsafe gitlabURL attrs =
 gitlabWithAttrsOne :: (FromJSON a) => Text -> Text -> GitLab (Either Status (Maybe a))
 gitlabWithAttrsOne = gitlabReqJsonOne
 
--- not currently used.
--- gitlabWithAttrsOneUnsafe :: (MonadIO m, FromJSON a) => Text -> Text -> GitLab (Maybe a)
--- gitlabWithAttrsOneUnsafe gitlabURL attrs =
---   fromRight (error "gitlabWithAttrsUnsafe error") <$> gitlabReqJsonOne gitlabURL attrs
+gitlabWithAttrsOneUnsafe :: (FromJSON a) => Text -> Text -> GitLab a
+gitlabWithAttrsOneUnsafe gitlabURL attrs = do
+  result <- gitlabReqJsonOne gitlabURL attrs
+  case result of
+    Left s -> error ("gitlabWithAttrsOneUnsafe: " <> show s)
+    Right Nothing -> error ("gitlabWithAttrsOneUnsafe: could not parse JSON for " <> show attrs)
+    Right (Just x) -> return x
 
 totalPages :: Response a -> Int
 totalPages resp =
