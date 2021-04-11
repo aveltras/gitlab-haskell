@@ -56,6 +56,10 @@ module GitLab.Types
     Discussion (..),
     IssueStatistics (..),
     IssueCounts (..),
+    IssueBoard (..),
+    BoardIssue (..),
+    BoardIssueLabel (..),
+    ProjectBoard (..),
   )
 where
 
@@ -180,7 +184,7 @@ data Owner = Ownwer
     owner_avatar_url :: Maybe Text,
     owner_web_url :: Text
   }
-  deriving (Generic, Show)
+  deriving (Generic, Show, Eq)
 
 -- | permissions.
 data Permissions = Permissions
@@ -266,7 +270,7 @@ data User = User
 data MilestoneState
   = MSActive
   | MSClosed
-  deriving (Show)
+  deriving (Show, Eq)
 
 instance FromJSON MilestoneState where
   parseJSON (String "active") = return MSActive
@@ -277,17 +281,17 @@ instance FromJSON MilestoneState where
 data Milestone = Milestone
   { milestone_project_id :: Maybe Int,
     milestone_group_id :: Maybe Int,
-    milestone_description :: Text,
-    milestone_state :: MilestoneState,
+    milestone_description :: Maybe Text,
+    milestone_state :: Maybe MilestoneState,
     milestone_due_date :: Maybe Text,
-    milestone_iid :: Int,
+    milestone_iid :: Maybe Int,
     milestone_created_at :: Maybe UTCTime,
     milestone_title :: Text,
     milestone_id :: Int,
-    milestone_updated_at :: UTCTime,
-    milestone_web_url :: URL
+    milestone_updated_at :: Maybe UTCTime,
+    milestone_web_url :: Maybe URL
   }
-  deriving (Generic, Show)
+  deriving (Generic, Show, Eq)
 
 instance FromJSON Milestone where
   parseJSON = genericParseJSON (defaultOptions {fieldLabelModifier = drop 10})
@@ -719,6 +723,49 @@ data IssueCounts = IssueCounts
   }
   deriving (Generic, Show)
 
+data IssueBoard = IssueBoard
+  { board_id :: Int,
+    board_name :: Text,
+    board_project :: ProjectBoard,
+    board_milestone :: Maybe Milestone,
+    board_lists :: [BoardIssue],
+    board_group :: Maybe Text, -- not sure, documentation doesn't indicate type
+    board_assignee :: Maybe Owner,
+    board_labels :: Maybe [BoardIssueLabel],
+    board_weight :: Maybe Int
+  }
+  deriving (Generic, Show, Eq)
+
+data BoardIssue = BoardIssue
+  { board_issue_id :: Int,
+    board_issue_label :: BoardIssueLabel,
+    board_issue_position :: Int,
+    board_issue_max_issue_count :: Int,
+    board_issue_max_issue_weight :: Int,
+    -- TODO, the docs don't say what type this should be
+    board_issue_limit_metric :: Maybe Int
+  }
+  deriving (Generic, Show, Eq)
+
+data BoardIssueLabel = BoardIssueLabel
+  { board_issue_label_id :: Maybe Int,
+    board_issue_label_name :: Text,
+    board_issue_label_color :: Text, -- parse into type from e.g. "#F0AD4E"
+    board_issue_label_description :: Maybe Text
+  }
+  deriving (Generic, Show, Eq)
+
+data ProjectBoard = ProjectBoard
+  { project_board_id :: Int,
+    project_board_name :: Text,
+    project_board_name_with_namespace :: Text,
+    project_board_path :: Text,
+    project_board_path_with_namespace :: Text,
+    project_board_http_url_to_repo :: Text,
+    project_board_web_url :: Text
+  }
+  deriving (Generic, Show, Eq)
+
 -----------------------------
 -- JSON GitLab parsers below
 -----------------------------
@@ -912,6 +959,30 @@ issueStatsPrefix "issues_opened" = "opened"
 issueStatsPrefix "issues_statistics" = "statistics"
 issueStatsPrefix "issues_counts" = "counts"
 issueStatsPrefix s = s
+
+boardsPrefix :: String -> String
+boardsPrefix "board_id" = "id"
+boardsPrefix "board_name" = "name"
+boardsPrefix "board_project" = "project"
+boardsPrefix "board_milestone" = "milestone"
+boardsPrefix "board_lists" = "lists"
+boardsPrefix "board_issue_id" = "id"
+boardsPrefix "board_issue_label" = "label"
+boardsPrefix "board_issue_position" = "position"
+boardsPrefix "board_issue_max_issue_count" = "max_issue_count"
+boardsPrefix "board_issue_max_issue_weight" = "max_issue_weight"
+boardsPrefix "board_issue_limit_metric" = "limit_metric"
+boardsPrefix "board_issue_label_name" = "name"
+boardsPrefix "board_issue_label_color" = "color"
+boardsPrefix "board_issue_label_description" = "description"
+boardsPrefix "project_board_id" = "id"
+boardsPrefix "project_board_name" = "name"
+boardsPrefix "project_board_name_with_namespace" = "name_with_namespace"
+boardsPrefix "project_board_path" = "path"
+boardsPrefix "project_board_path_with_namespace" = "path_with_namespace"
+boardsPrefix "project_board_http_url_to_repo" = "http_url_to_repo"
+boardsPrefix "project_board_web_url" = "web_url"
+boardsPrefix s = s
 
 instance FromJSON TimeStats where
   parseJSON =
@@ -1166,5 +1237,37 @@ instance FromJSON IssueStatistics where
     genericParseJSON
       ( defaultOptions
           { fieldLabelModifier = issueStatsPrefix
+          }
+      )
+
+instance FromJSON IssueBoard where
+  parseJSON =
+    genericParseJSON
+      ( defaultOptions
+          { fieldLabelModifier = boardsPrefix
+          }
+      )
+
+instance FromJSON BoardIssue where
+  parseJSON =
+    genericParseJSON
+      ( defaultOptions
+          { fieldLabelModifier = boardsPrefix
+          }
+      )
+
+instance FromJSON BoardIssueLabel where
+  parseJSON =
+    genericParseJSON
+      ( defaultOptions
+          { fieldLabelModifier = boardsPrefix
+          }
+      )
+
+instance FromJSON ProjectBoard where
+  parseJSON =
+    genericParseJSON
+      ( defaultOptions
+          { fieldLabelModifier = boardsPrefix
           }
       )
