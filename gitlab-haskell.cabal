@@ -79,6 +79,7 @@ library
                 , GitLab.API.Version
                 , GitLab.API.Notes
                 , GitLab.API.Discussions
+                , GitLab.API.Boards
                 , GitLab.SystemHooks.Types
                 , GitLab.SystemHooks.GitLabSystemHooks
                 , GitLab.SystemHooks.Rules
@@ -110,6 +111,8 @@ test-suite test-gitlab-haskell
   type:          exitcode-stdio-1.0
   main-is:       Tests.hs
   other-modules: SystemHookTests
+               , API.BoardsTests
+               , API.Common
   hs-source-dirs: tests/
   default-language: Haskell2010
   build-depends: base >= 4.8.0.0 && < 6
