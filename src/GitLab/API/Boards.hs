@@ -88,13 +88,13 @@ createIssueBoard' projectId boardName = do
     boardAddr =
       "/projects/" <> T.pack (show projectId) <> "/boards/?name=" <> boardName
 
--- | Creates a project issue board.
+-- | Updates a project issue board.
 updateIssueBoard' ::
   -- | the project ID
   Int ->
   -- | the board ID
   Int ->
-  -- | issue board attributes
+  -- | attributes for updating boards
   UpdateBoardAttrs ->
   GitLab (Either Status IssueBoard)
 updateIssueBoard' projectId boardId attrs = do
