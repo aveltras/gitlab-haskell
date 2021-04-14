@@ -10,7 +10,7 @@
 -- Stability   : stable
 module GitLab.API.Issues
   ( defaultIssueFilters,
-    IssueFilters (..),
+    IssueAttrs (..),
     DueDate (..),
     IssueSearchIn (..),
     IssueOrderBy (..),
@@ -45,9 +45,9 @@ import GitLab.WebRequests.GitLabWebCalls
 import Network.HTTP.Types.Status
 
 -- | No issue filters, thereby returning all issues.
-defaultIssueFilters :: IssueFilters
+defaultIssueFilters :: IssueAttrs
 defaultIssueFilters =
-  IssueFilters Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing
+  IssueAttrs Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing
 
 data DueDate
   = NoDueDate
@@ -125,7 +125,7 @@ projectIssues ::
   -- | the project
   Project ->
   -- | filter the issues, see https://docs.gitlab.com/ee/api/issues.html#list-issues
-  IssueFilters ->
+  IssueAttrs ->
   -- the GitLab issues
   GitLab [Issue]
 projectIssues p filters = do
@@ -136,39 +136,39 @@ projectIssues' ::
   -- | the project ID
   Int ->
   -- | filter the issues, see https://docs.gitlab.com/ee/api/issues.html#list-issues
-  IssueFilters ->
+  IssueAttrs ->
   -- | the GitLab issues
   GitLab (Either Status [Issue])
-projectIssues' projectId filters =
-  gitlabWithAttrs path attrs
+projectIssues' projectId attrs =
+  gitlabWithAttrs path urlAttrs
   where
     path = "/projects/" <> T.pack (show projectId) <> "/issues"
-    attrs =
+    urlAttrs =
       T.pack $
         "&scope=all"
-          <> concat (showIssueFilters filters)
+          <> issuesAttrs attrs
 
 -- | Gets issues count statistics on all issues the authenticated user has access to.
 issueStatisticsUser ::
   -- | filter the issues, see https://docs.gitlab.com/ee/api/issues_statistics.html#get-issues-statistics
-  IssueFilters ->
+  IssueAttrs ->
   -- | the issue statistics
   GitLab IssueStatistics
-issueStatisticsUser filters =
-  gitlabWithAttrsOneUnsafe path attrs
+issueStatisticsUser attrs =
+  gitlabWithAttrsOneUnsafe path urlAttrs
   where
     path = "/issues_statistics"
-    attrs =
+    urlAttrs =
       T.pack $
         "&scope=all"
-          <> concat (showIssueFilters filters)
+          <> issuesAttrs attrs
 
 -- | Gets issues count statistics for a given group.
 issueStatisticsGroup ::
   -- | the group
   Group ->
   -- | filter the issues, see https://docs.gitlab.com/ee/api/issues_statistics.html#get-issues-statistics
-  IssueFilters ->
+  IssueAttrs ->
   -- | the issue statistics
   GitLab IssueStatistics
 issueStatisticsGroup group filters = do
@@ -183,24 +183,24 @@ issueStatisticsGroup' ::
   -- | the group ID
   Int ->
   -- | filter the issues, see https://docs.gitlab.com/ee/api/issues_statistics.html#get-issues-statistics
-  IssueFilters ->
+  IssueAttrs ->
   -- | the issue statistics
   GitLab (Either Status (Maybe IssueStatistics))
-issueStatisticsGroup' groupId filters =
-  gitlabWithAttrsOne path attrs
+issueStatisticsGroup' groupId attrs =
+  gitlabWithAttrsOne path urlAttrs
   where
     path = T.pack $ "/groups/" <> show groupId <> "/issues_statistics"
-    attrs =
+    urlAttrs =
       T.pack $
         "&scope=all"
-          <> concat (showIssueFilters filters)
+          <> issuesAttrs attrs
 
 -- | Gets issues count statistics for a given group.
 issueStatisticsProject ::
   -- | the project
   Project ->
   -- | filter the issues, see https://docs.gitlab.com/ee/api/issues_statistics.html#get-issues-statistics
-  IssueFilters ->
+  IssueAttrs ->
   -- | the issue statistics
   GitLab IssueStatistics
 issueStatisticsProject proj filters = do
@@ -215,17 +215,17 @@ issueStatisticsProject' ::
   -- | the project ID
   Int ->
   -- | filter the issues, see https://docs.gitlab.com/ee/api/issues_statistics.html#get-issues-statistics
-  IssueFilters ->
+  IssueAttrs ->
   -- | the issue statistics
   GitLab (Either Status (Maybe IssueStatistics))
-issueStatisticsProject' projId filters =
-  gitlabWithAttrsOne path attrs
+issueStatisticsProject' projId attrs =
+  gitlabWithAttrsOne path urlAttrs
   where
     path = T.pack $ "/projects/" <> show projId <> "/issues_statistics"
-    attrs =
+    urlAttrs =
       T.pack $
         "&scope=all"
-          <> concat (showIssueFilters filters)
+          <> issuesAttrs attrs
 
 -- | gets all issues create by a user.
 userIssues ::
@@ -299,7 +299,7 @@ editIssue projId issueId editIssueReq = do
 -------------------------------
 -- Internal functions and types
 
-data IssueFilters = IssueFilters
+data IssueAttrs = IssueAttrs
   { issueFilter_assignee_id :: Maybe Int,
     issueFilter_assignee_username :: Maybe String,
     issueFilter_author_id :: Maybe Int,
@@ -326,37 +326,42 @@ data IssueFilters = IssueFilters
     issueFilter_with_labels_details :: Maybe Bool
   }
 
-showIssueFilters :: IssueFilters -> [String]
-showIssueFilters filters =
-  catMaybes
-    [ (\i -> Just ("&assignee_id=" <> show i)) =<< issueFilter_assignee_id filters,
-      (\t -> Just ("&assignee_username=" <> t)) =<< issueFilter_assignee_username filters,
-      (\i -> Just ("&author_id=" <> show i)) =<< issueFilter_author_id filters,
-      (\i -> Just ("&author_username=" <> show i)) =<< issueFilter_author_username filters,
-      (\b -> Just ("&confidential=" <> showBool b)) =<< issueFilter_confidential filters,
-      (\t -> Just ("&created_after=" <> showTime t)) =<< issueFilter_created_after filters,
-      (\t -> Just ("&created_before=" <> showTime t)) =<< issueFilter_created_before filters,
-      (\due -> Just ("&due_date=" <> show due)) =<< issueFilter_due_date filters,
-      (\iids -> Just ("&iids[]=" <> show iids)) =<< issueFilter_iids filters,
-      (\issueIn -> Just ("&assignee_id=" <> show issueIn)) =<< issueFilter_in filters,
-      (\i -> Just ("&iteration_id=" <> show i)) =<< issueFilter_iteration_id filters,
-      (\s -> Just ("&iteration_title=" <> s)) =<< issueFilter_iteration_title filters,
-      (\s -> Just ("&milestone=" <> s)) =<< issueFilter_milestone filters,
-      (\s -> Just ("&labels=" <> s)) =<< issueFilter_labels filters,
-      (\s -> Just ("&my_reaction_emoji=" <> s)) =<< issueFilter_my_reaction_emoji filters,
-      (\b -> Just ("&non_archived=" <> showBool b)) =<< issueFilter_non_archived filters,
-      (\x -> Just ("&order_by=" <> show x)) =<< issueFilter_order_by filters,
-      (\x -> Just ("&scope=" <> show x)) =<< issueFilter_scope filters,
-      (\s -> Just ("&search=" <> s)) =<< issueFilter_search filters,
-      (\x -> Just ("&sort=" <> show x)) =<< issueFilter_sort filters,
-      (\x -> Just ("&state=" <> show x)) =<< issueFilter_state filters,
-      (\t -> Just ("&updated_after=" <> showTime t)) =<< issueFilter_updated_after filters,
-      (\t -> Just ("&updated_before=" <> showTime t)) =<< issueFilter_updated_before filters,
-      (\b -> Just ("&with_labels_details=" <> showBool b)) =<< issueFilter_with_labels_details filters
-    ]
+issuesAttrs :: IssueAttrs -> String
+issuesAttrs filters =
+  case attrsUrl of
+    [] -> ""
+    (x : xs) -> "?" <> x <> concatMap ('&' :) xs
   where
-    showBool :: Bool -> String
-    showBool True = "true"
-    showBool False = "false"
-    showTime :: UTCTime -> String
-    showTime = iso8601Show
+    attrsUrl =
+      catMaybes
+        [ (\i -> Just ("assignee_id=" <> show i)) =<< issueFilter_assignee_id filters,
+          (\t -> Just ("assignee_username=" <> t)) =<< issueFilter_assignee_username filters,
+          (\i -> Just ("author_id=" <> show i)) =<< issueFilter_author_id filters,
+          (\i -> Just ("author_username=" <> show i)) =<< issueFilter_author_username filters,
+          (\b -> Just ("confidential=" <> showBool b)) =<< issueFilter_confidential filters,
+          (\t -> Just ("created_after=" <> showTime t)) =<< issueFilter_created_after filters,
+          (\t -> Just ("created_before=" <> showTime t)) =<< issueFilter_created_before filters,
+          (\due -> Just ("due_date=" <> show due)) =<< issueFilter_due_date filters,
+          (\iids -> Just ("iids[]=" <> show iids)) =<< issueFilter_iids filters,
+          (\issueIn -> Just ("assignee_id=" <> show issueIn)) =<< issueFilter_in filters,
+          (\i -> Just ("iteration_id=" <> show i)) =<< issueFilter_iteration_id filters,
+          (\s -> Just ("iteration_title=" <> s)) =<< issueFilter_iteration_title filters,
+          (\s -> Just ("milestone=" <> s)) =<< issueFilter_milestone filters,
+          (\s -> Just ("labels=" <> s)) =<< issueFilter_labels filters,
+          (\s -> Just ("my_reaction_emoji=" <> s)) =<< issueFilter_my_reaction_emoji filters,
+          (\b -> Just ("non_archived=" <> showBool b)) =<< issueFilter_non_archived filters,
+          (\x -> Just ("order_by=" <> show x)) =<< issueFilter_order_by filters,
+          (\x -> Just ("scope=" <> show x)) =<< issueFilter_scope filters,
+          (\s -> Just ("search=" <> s)) =<< issueFilter_search filters,
+          (\x -> Just ("sort=" <> show x)) =<< issueFilter_sort filters,
+          (\x -> Just ("state=" <> show x)) =<< issueFilter_state filters,
+          (\t -> Just ("updated_after=" <> showTime t)) =<< issueFilter_updated_after filters,
+          (\t -> Just ("updated_before=" <> showTime t)) =<< issueFilter_updated_before filters,
+          (\b -> Just ("with_labels_details=" <> showBool b)) =<< issueFilter_with_labels_details filters
+        ]
+      where
+        showBool :: Bool -> String
+        showBool True = "true"
+        showBool False = "false"
+        showTime :: UTCTime -> String
+        showTime = iso8601Show
