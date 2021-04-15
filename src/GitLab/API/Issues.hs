@@ -44,10 +44,10 @@ import GitLab.Types
 import GitLab.WebRequests.GitLabWebCalls
 import Network.HTTP.Types.Status
 
--- | No issue filters, thereby returning all issues.
+-- | No issue filters, thereby returning all issues. Default scope is "all".
 defaultIssueFilters :: IssueAttrs
 defaultIssueFilters =
-  IssueAttrs Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing
+  IssueAttrs Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing (Just All) Nothing Nothing Nothing Nothing Nothing Nothing
 
 data DueDate
   = NoDueDate
@@ -140,12 +140,13 @@ projectIssues' ::
   -- | the GitLab issues
   GitLab (Either Status [Issue])
 projectIssues' projectId attrs =
-  gitlabWithAttrs path urlAttrs
+  gitlab path
   where
-    path = "/projects/" <> T.pack (show projectId) <> "/issues"
-    urlAttrs =
+    path =
       T.pack $
-        "&scope=all"
+        "/projects/"
+          <> show projectId
+          <> "/issues"
           <> issuesAttrs attrs
 
 -- | Gets issues count statistics on all issues the authenticated user has access to.
@@ -155,12 +156,11 @@ issueStatisticsUser ::
   -- | the issue statistics
   GitLab IssueStatistics
 issueStatisticsUser attrs =
-  gitlabWithAttrsOneUnsafe path urlAttrs
+  gitlabOneUnsafe path
   where
-    path = "/issues_statistics"
-    urlAttrs =
+    path =
       T.pack $
-        "&scope=all"
+        "/issues_statistics"
           <> issuesAttrs attrs
 
 -- | Gets issues count statistics for a given group.
@@ -187,12 +187,13 @@ issueStatisticsGroup' ::
   -- | the issue statistics
   GitLab (Either Status (Maybe IssueStatistics))
 issueStatisticsGroup' groupId attrs =
-  gitlabWithAttrsOne path urlAttrs
+  gitlabOne path
   where
-    path = T.pack $ "/groups/" <> show groupId <> "/issues_statistics"
-    urlAttrs =
+    path =
       T.pack $
-        "&scope=all"
+        "/groups/"
+          <> show groupId
+          <> "/issues_statistics"
           <> issuesAttrs attrs
 
 -- | Gets issues count statistics for a given group.
@@ -219,12 +220,13 @@ issueStatisticsProject' ::
   -- | the issue statistics
   GitLab (Either Status (Maybe IssueStatistics))
 issueStatisticsProject' projId attrs =
-  gitlabWithAttrsOne path urlAttrs
+  gitlabOne path
   where
-    path = T.pack $ "/projects/" <> show projId <> "/issues_statistics"
-    urlAttrs =
+    path =
       T.pack $
-        "&scope=all"
+        "/projects/"
+          <> show projId
+          <> "/issues_statistics"
           <> issuesAttrs attrs
 
 -- | gets all issues create by a user.

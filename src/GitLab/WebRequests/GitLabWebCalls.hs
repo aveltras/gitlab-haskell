@@ -5,6 +5,7 @@
 module GitLab.WebRequests.GitLabWebCalls
   ( gitlab,
     gitlabUnsafe,
+    gitlabOneUnsafe,
     gitlabWithAttrs,
     gitlabWithAttrsUnsafe,
     gitlabOne,
@@ -70,9 +71,9 @@ gitlabPost urlPath dataBody = do
         ( case parseBSOne (responseBody resp) of
             Just x -> Right (Just x)
             Nothing -> Right Nothing
-          -- Nothing ->
-          --   Left $
-          --     mkStatus 409 "unable to parse POST response"
+            -- Nothing ->
+            --   Left $
+            --     mkStatus 409 "unable to parse POST response"
         )
     else return (Left (responseStatus resp))
 
@@ -276,6 +277,13 @@ gitlabUnsafe addr =
 
 gitlabOne :: (FromJSON a) => Text -> GitLab (Either Status (Maybe a))
 gitlabOne addr = gitlabReqJsonOne addr ""
+
+gitlabOneUnsafe :: (FromJSON a) => Text -> GitLab a
+gitlabOneUnsafe addr = do
+  result <- fromRight (error "gitlabOneUnsafe error") <$> gitlabOne addr
+  case result of
+    Nothing -> error "gitlabOneUnsafe error"
+    Just value -> return value
 
 gitlabWithAttrs :: (FromJSON a) => Text -> Text -> GitLab (Either Status [a])
 gitlabWithAttrs = gitlabReqJsonMany
