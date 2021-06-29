@@ -53,6 +53,9 @@ data-files:     data/system-hooks/*.json
 build-type:     Simple
 extra-source-files:
     README.md
+  , data/api/boards/list-project.json
+  , data/api/boards/create-board.json
+  , data/api/boards/update-board.json
 
 source-repository head
   type: git
