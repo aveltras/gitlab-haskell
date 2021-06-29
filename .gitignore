@@ -33,3 +33,4 @@ examples/Main
 examples/FileHook
 *~
 ~*
+.hie/
