@@ -28,6 +28,7 @@ module GitLab
     module GitLab.API.Todos,
     module GitLab.API.Version,
     module GitLab.API.Notes,
+    module GitLab.API.Boards,
     module GitLab.API.Discussions,
     module GitLab.SystemHooks.GitLabSystemHooks,
     module GitLab.SystemHooks.Types,
@@ -37,6 +38,7 @@ where
 
 import Control.Monad.IO.Class
 import Control.Monad.Trans.Reader
+import GitLab.API.Boards
 import GitLab.API.Branches
 import GitLab.API.Commits
 import GitLab.API.Discussions
@@ -94,8 +96,10 @@ runGitLabWithManager manager cfg action = do
   -- test the token access
   tokenTest <- runReaderT gitlabVersion (GitLabState cfg manager)
   case tokenTest of
-    Left (Status 401 "Unauthorized") -> error "access token not accepted."
-    Left st -> error ("unexpected HTTP status: " <> show st)
+    Left response ->
+      case responseStatus response of
+        (Status 401 "Unauthorized") -> error "access token not accepted."
+        st -> error ("unexpected HTTP status: " <> show st)
     Right _versionInfo ->
       -- it worked, run the user code.
       runReaderT action (GitLabState cfg manager)
