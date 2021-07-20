@@ -51,7 +51,7 @@ gitlabPost ::
   Text ->
   -- | the data to post
   Text ->
-  GitLab (Either Status (Maybe b))
+  GitLab (Either (Response BSL.ByteString) (Maybe b))
 gitlabPost urlPath dataBody = do
   cfg <- serverCfg <$> ask
   manager <- httpManager <$> ask
@@ -61,7 +61,9 @@ gitlabPost urlPath dataBody = do
         request'
           { method = "POST",
             requestHeaders =
-              [("PRIVATE-TOKEN", T.encodeUtf8 (token cfg))],
+              [ ("PRIVATE-TOKEN", T.encodeUtf8 (token cfg)),
+                ("content-type", "application/x-www-form-urlencoded")
+              ],
             requestBody = RequestBodyBS (T.encodeUtf8 dataBody)
           }
   resp <- liftIO $ tryGitLab 0 request (retries cfg) manager Nothing
@@ -75,7 +77,7 @@ gitlabPost urlPath dataBody = do
             --   Left $
             --     mkStatus 409 "unable to parse POST response"
         )
-    else return (Left (responseStatus resp))
+    else return (Left resp)
 
 gitlabPut ::
   FromJSON b =>
@@ -83,7 +85,7 @@ gitlabPut ::
   Text ->
   -- | the data to post
   Text ->
-  GitLab (Either Status b)
+  GitLab (Either (Response BSL.ByteString) b)
 gitlabPut urlPath dataBody = do
   cfg <- serverCfg <$> ask
   manager <- httpManager <$> ask
@@ -94,7 +96,7 @@ gitlabPut urlPath dataBody = do
           { method = "PUT",
             requestHeaders =
               [ ("PRIVATE-TOKEN", T.encodeUtf8 (token cfg)),
-                ("content-type", "application/json")
+                ("content-type", "application/x-www-form-urlencoded")
               ],
             requestBody = RequestBodyBS (T.encodeUtf8 dataBody)
           }
@@ -105,15 +107,14 @@ gitlabPut urlPath dataBody = do
         ( case parseBSOne (responseBody resp) of
             Just x -> Right x
             Nothing ->
-              Left $
-                mkStatus 409 "unable to parse PUT response"
+              Left resp
         )
-    else return (Left (responseStatus resp))
+    else return (Left resp)
 
 gitlabDelete ::
   -- | the URL to post to
   Text ->
-  GitLab (Either Status ())
+  GitLab (Either (Response BSL.ByteString) ())
 gitlabDelete urlPath = do
   cfg <- serverCfg <$> ask
   manager <- httpManager <$> ask
@@ -124,14 +125,14 @@ gitlabDelete urlPath = do
           { method = "DELETE",
             requestHeaders =
               [ ("PRIVATE-TOKEN", T.encodeUtf8 (token cfg)),
-                ("content-type", "application/json")
+                ("content-type", "application/x-www-form-urlencoded")
               ],
             requestBody = RequestBodyBS BS.empty
           }
   resp <- liftIO $ tryGitLab 0 request (retries cfg) manager Nothing
   if successStatus (responseStatus resp)
     then return (Right ())
-    else return (Left (responseStatus resp))
+    else return (Left resp)
 
 tryGitLab ::
   -- | the current retry count
@@ -164,7 +165,7 @@ parseBSMany bs =
     Left s -> Exception.throwIO $ GitLabException s
     Right xs -> return xs
 
-gitlabReqJsonMany :: (FromJSON a) => Text -> Text -> GitLab (Either Status [a])
+gitlabReqJsonMany :: (FromJSON a) => Text -> Text -> GitLab (Either (Response BSL.ByteString) [a])
 gitlabReqJsonMany urlPath attrs =
   go 1 []
   where
@@ -195,7 +196,7 @@ gitlabReqJsonMany urlPath attrs =
           if numPages == i
             then return (Right accum')
             else go (i + 1) accum'
-        else return (Left (responseStatus resp))
+        else return (Left resp)
 
 -- not sure what this was planned for
 --
@@ -222,7 +223,7 @@ gitlabReqJsonMany urlPath attrs =
 --         then return (Right (parser (responseBody resp)))
 --         else return (Left (responseStatus resp))
 
-gitlabReqOne :: (BSL.ByteString -> output) -> Text -> Text -> GitLab (Either Status output)
+gitlabReqOne :: (BSL.ByteString -> output) -> Text -> Text -> GitLab (Either (Response BSL.ByteString) output)
 gitlabReqOne parser urlPath attrs = go
   where
     go = do
@@ -245,7 +246,7 @@ gitlabReqOne parser urlPath attrs = go
       resp <- liftIO $ tryGitLab 0 request (retries cfg) manager Nothing
       if successStatus (responseStatus resp)
         then return (Right (parser (responseBody resp)))
-        else return (Left (responseStatus resp))
+        else return (Left resp)
 
 -- not sure what this was planned for
 --
@@ -253,17 +254,17 @@ gitlabReqOne parser urlPath attrs = go
 -- gitlabReqJsonOneIO mgr cfg urlPath attrs =
 --   gitlabReqOneIO mgr cfg parseBSOne urlPath attrs
 
-gitlabReqJsonOne :: (FromJSON a) => Text -> Text -> GitLab (Either Status (Maybe a))
+gitlabReqJsonOne :: (FromJSON a) => Text -> Text -> GitLab (Either (Response BSL.ByteString) (Maybe a))
 gitlabReqJsonOne =
   gitlabReqOne parseBSOne
 
-gitlabReqText :: Text -> GitLab (Either Status String)
+gitlabReqText :: Text -> GitLab (Either (Response BSL.ByteString) String)
 gitlabReqText urlPath = gitlabReqOne C.unpack urlPath ""
 
-gitlabReqByteString :: Text -> GitLab (Either Status BSL.ByteString)
+gitlabReqByteString :: Text -> GitLab (Either (Response BSL.ByteString) BSL.ByteString)
 gitlabReqByteString urlPath = gitlabReqOne Prelude.id urlPath ""
 
-gitlab :: FromJSON a => Text -> GitLab (Either Status [a])
+gitlab :: FromJSON a => Text -> GitLab (Either (Response BSL.ByteString) [a])
 gitlab addr = gitlabReqJsonMany addr ""
 
 gitlabUnsafe :: (FromJSON a) => Text -> GitLab [a]
@@ -275,7 +276,7 @@ gitlabUnsafe addr =
 -- gitlabOneIO :: (FromJSON a) => Manager -> GitLabServerConfig -> Text -> IO (Either Status (Maybe a))
 -- gitlabOneIO mgr cfg addr = gitlabReqJsonOneIO mgr cfg addr ""
 
-gitlabOne :: (FromJSON a) => Text -> GitLab (Either Status (Maybe a))
+gitlabOne :: (FromJSON a) => Text -> GitLab (Either (Response BSL.ByteString) (Maybe a))
 gitlabOne addr = gitlabReqJsonOne addr ""
 
 gitlabOneUnsafe :: (FromJSON a) => Text -> GitLab a
@@ -285,14 +286,14 @@ gitlabOneUnsafe addr = do
     Nothing -> error "gitlabOneUnsafe error"
     Just value -> return value
 
-gitlabWithAttrs :: (FromJSON a) => Text -> Text -> GitLab (Either Status [a])
+gitlabWithAttrs :: (FromJSON a) => Text -> Text -> GitLab (Either (Response BSL.ByteString) [a])
 gitlabWithAttrs = gitlabReqJsonMany
 
 gitlabWithAttrsUnsafe :: (FromJSON a) => Text -> Text -> GitLab [a]
 gitlabWithAttrsUnsafe gitlabURL attrs =
   fromRight (error "gitlabWithAttrsUnsafe error") <$> gitlabReqJsonMany gitlabURL attrs
 
-gitlabWithAttrsOne :: (FromJSON a) => Text -> Text -> GitLab (Either Status (Maybe a))
+gitlabWithAttrsOne :: (FromJSON a) => Text -> Text -> GitLab (Either (Response BSL.ByteString) (Maybe a))
 gitlabWithAttrsOne = gitlabReqJsonOne
 
 gitlabWithAttrsOneUnsafe :: (FromJSON a) => Text -> Text -> GitLab a
