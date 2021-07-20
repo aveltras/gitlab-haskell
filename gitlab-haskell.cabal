@@ -97,6 +97,7 @@ library
               , aeson >= 1.4.4.0
               , bytestring
               , text
+              , http-client
               , http-types
               , transformers
               , unliftio
