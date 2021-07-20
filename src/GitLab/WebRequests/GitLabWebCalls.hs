@@ -176,7 +176,11 @@ gitlabReqJsonMany urlPath attrs =
             url cfg
               <> "/api/v4"
               <> urlPath
-              <> "?per_page=100"
+              <> ( if (hasQuestionMark urlPath)
+                     then "&"
+                     else "?"
+                 )
+              <> "per_page=100"
               <> "&page="
               <> T.pack (show i)
               <> T.decodeUtf8 (urlEncode False (T.encodeUtf8 attrs))
@@ -233,7 +237,11 @@ gitlabReqOne parser urlPath attrs = go
             url cfg
               <> "/api/v4"
               <> urlPath
-              <> "?per_page=100"
+              <> ( if (hasQuestionMark urlPath)
+                     then "&"
+                     else "?"
+                 )
+              <> "per_page=100"
               <> "&page=1"
               <> attrs
       let request' = parseRequest_ (T.unpack url')
@@ -319,3 +327,6 @@ totalPages resp =
 successStatus :: Status -> Bool
 successStatus (Status n _msg) =
   n >= 200 && n <= 226
+
+hasQuestionMark :: Text -> Bool
+hasQuestionMark = T.isInfixOf "?"
