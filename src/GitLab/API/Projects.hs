@@ -10,6 +10,7 @@
 -- Stability   : stable
 module GitLab.API.Projects where
 
+import qualified Data.ByteString.Lazy as BSL
 import Data.Either
 import Data.List
 import Data.Text (Text)
@@ -22,7 +23,7 @@ import GitLab.API.Pipelines
 import GitLab.API.Users
 import GitLab.Types
 import GitLab.WebRequests.GitLabWebCalls
-import Network.HTTP.Types.Status
+import Network.HTTP.Client
 import Network.HTTP.Types.URI
 import UnliftIO.Async
 
@@ -38,7 +39,7 @@ allProjects =
 projectForks ::
   -- | name or namespace of the project
   Text ->
-  GitLab (Either Status [Project])
+  GitLab (Either (Response BSL.ByteString) [Project])
 projectForks projectName = do
   let urlPath =
         "/projects/"
@@ -51,7 +52,7 @@ projectForks projectName = do
 searchProjectId ::
   -- | project ID
   Int ->
-  GitLab (Either Status (Maybe Project))
+  GitLab (Either (Response BSL.ByteString) (Maybe Project))
 searchProjectId projectId = do
   let urlPath = T.pack ("/projects/" <> show projectId)
   gitlabWithAttrsOne urlPath "&statistics=true"
@@ -72,7 +73,7 @@ projectsWithName projectName =
 -- > projectsWithNameAndUser "user1" "project1"
 --
 -- looks for "user1/project1"
-projectsWithNameAndUser :: Text -> Text -> GitLab (Either Status (Maybe Project))
+projectsWithNameAndUser :: Text -> Text -> GitLab (Either (Response BSL.ByteString) (Maybe Project))
 projectsWithNameAndUser username projectName =
   gitlabWithAttrsOne
     ( "/projects/"
@@ -97,12 +98,12 @@ commitsEmailAddresses project = do
 
 -- | gets the email addresses in the author information in all commit
 -- for a project defined by the project's ID.
-commitsEmailAddresses' :: Int -> GitLab (Either Status [Text])
+commitsEmailAddresses' :: Int -> GitLab (Either (Response BSL.ByteString) [Text])
 commitsEmailAddresses' projectId = do
   -- (commits :: [Commit]) <- projectCommits' projectId
   attempt <- projectCommits' projectId
   case attempt of
-    Left httpStatus -> return (Left httpStatus)
+    Left resp -> return (Left resp)
     Right (commits :: [Commit]) ->
       return (Right (map author_email commits))
 
@@ -210,13 +211,13 @@ namespacePathToUserId namespacePath = do
     Just usr -> return (Just (user_id usr))
 
 -- | gets all diffs in a project for a given commit SHA.
-projectDiffs :: Project -> Text -> GitLab (Either Status [Diff])
+projectDiffs :: Project -> Text -> GitLab (Either (Response BSL.ByteString) [Diff])
 projectDiffs proj =
   projectDiffs' (project_id proj)
 
 -- | gets all diffs in a project for a given project ID, for a given
 -- commit SHA.
-projectDiffs' :: Int -> Text -> GitLab (Either Status [Diff])
+projectDiffs' :: Int -> Text -> GitLab (Either (Response BSL.ByteString) [Diff])
 projectDiffs' projId commitSha =
   gitlab
     ( "/projects/"
@@ -234,7 +235,7 @@ addGroupToProject ::
   Int ->
   -- | level of access granted
   AccessLevel ->
-  GitLab (Either Status (Maybe GroupShare))
+  GitLab (Either (Response BSL.ByteString) (Maybe GroupShare))
 addGroupToProject groupId projectId access =
   gitlabPost addr dataBody
   where

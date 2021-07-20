@@ -9,12 +9,13 @@
 -- Stability   : stable
 module GitLab.API.RepositoryFiles where
 
+import qualified Data.ByteString.Lazy as BSL
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 import GitLab.Types
 import GitLab.WebRequests.GitLabWebCalls
-import Network.HTTP.Types.Status
+import Network.HTTP.Client
 import Network.HTTP.Types.URI
 
 -- | Get a list of repository files and directories in a project.
@@ -25,7 +26,7 @@ repositoryFiles ::
   Text ->
   -- | name of the branch, tag or commit
   Text ->
-  GitLab (Either Status (Maybe RepositoryFile))
+  GitLab (Either (Response BSL.ByteString) (Maybe RepositoryFile))
 repositoryFiles project = repositoryFiles' (project_id project)
 
 -- | Get a list of repository files and directories in a project given
@@ -37,7 +38,7 @@ repositoryFiles' ::
   Text ->
   -- | name of the branch, tag or commit
   Text ->
-  GitLab (Either Status (Maybe RepositoryFile))
+  GitLab (Either (Response BSL.ByteString) (Maybe RepositoryFile))
 repositoryFiles' projectId filePath reference =
   gitlabWithAttrsOne addr ("&ref=" <> reference)
   where
@@ -55,7 +56,7 @@ repositoryFileBlob ::
   Int ->
   -- | blob SHA
   Text ->
-  GitLab (Either Status String)
+  GitLab (Either (Response BSL.ByteString) String)
 repositoryFileBlob projectId blobSha =
   gitlabReqText addr
   where

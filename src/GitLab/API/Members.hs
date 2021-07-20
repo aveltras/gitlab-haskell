@@ -10,12 +10,13 @@
 -- Stability   : stable
 module GitLab.API.Members where
 
+import qualified Data.ByteString.Lazy as BSL
 import Data.Either
 import Data.Text (Text)
 import qualified Data.Text as T
 import GitLab.Types
 import GitLab.WebRequests.GitLabWebCalls
-import Network.HTTP.Types.Status
+import Network.HTTP.Client
 
 -- | the access levels for project members. See <https://docs.gitlab.com/ee/user/permissions.html#project-members-permissions>
 data AccessLevel
@@ -39,7 +40,7 @@ membersOfProject p = do
   return (fromRight (error "membersOfProject error") result)
 
 -- | the members of a project given its ID.
-membersOfProject' :: Int -> GitLab (Either Status [Member])
+membersOfProject' :: Int -> GitLab (Either (Response BSL.ByteString) [Member])
 membersOfProject' projectId =
   gitlab addr
   where
@@ -56,7 +57,7 @@ addMemberToProject ::
   AccessLevel ->
   -- | the user
   User ->
-  GitLab (Either Status (Maybe Member))
+  GitLab (Either (Response BSL.ByteString) (Maybe Member))
 addMemberToProject project access usr =
   addMemberToProject' (project_id project) access (user_id usr)
 
@@ -70,7 +71,7 @@ addMemberToProject' ::
   AccessLevel ->
   -- | user ID
   Int ->
-  GitLab (Either Status (Maybe Member))
+  GitLab (Either (Response BSL.ByteString) (Maybe Member))
 addMemberToProject' projectId access userId =
   gitlabPost addr dataBody
   where
@@ -90,7 +91,7 @@ addMembersToProject ::
   AccessLevel ->
   -- | users to add to the project
   [User] ->
-  GitLab [Either Status (Maybe Member)]
+  GitLab [Either (Response BSL.ByteString) (Maybe Member)]
 addMembersToProject project access =
   mapM (addMemberToProject project access)
 
@@ -104,6 +105,6 @@ addMembersToProject' ::
   AccessLevel ->
   -- | IDs of users to add to the project
   [Int] ->
-  GitLab [Either Status (Maybe Member)]
+  GitLab [Either (Response BSL.ByteString) (Maybe Member)]
 addMembersToProject' projectId access =
   mapM (addMemberToProject' projectId access)

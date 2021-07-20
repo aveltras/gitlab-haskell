@@ -9,13 +9,14 @@
 -- Stability   : stable
 module GitLab.API.Boards where
 
+import qualified Data.ByteString.Lazy as BSL
 import Data.Either
 import Data.Maybe
 import Data.Text (Text)
 import qualified Data.Text as T
 import GitLab.Types
 import GitLab.WebRequests.GitLabWebCalls
-import Network.HTTP.Types.Status
+import Network.HTTP.Client
 
 -- | returns all issue boards for a project.
 projectIssueBoards ::
@@ -31,7 +32,7 @@ projectIssueBoards project = do
 projectIssueBoards' ::
   -- | project ID
   Int ->
-  GitLab (Either Status [IssueBoard])
+  GitLab (Either (Response BSL.ByteString) [IssueBoard])
 projectIssueBoards' projectId =
   gitlab (boardsAddr projectId)
   where
@@ -45,7 +46,7 @@ projectIssueBoard ::
   Project ->
   -- | the board ID
   Int ->
-  GitLab (Either Status (Maybe IssueBoard))
+  GitLab (Either (Response BSL.ByteString) (Maybe IssueBoard))
 projectIssueBoard project = do
   projectIssueBoard' (project_id project)
 
@@ -55,7 +56,7 @@ projectIssueBoard' ::
   Int ->
   -- | the board ID
   Int ->
-  GitLab (Either Status (Maybe IssueBoard))
+  GitLab (Either (Response BSL.ByteString) (Maybe IssueBoard))
 projectIssueBoard' projectId boardId = do
   gitlabOne boardAddr
   where
@@ -80,7 +81,7 @@ createIssueBoard' ::
   Int ->
   -- | board name
   Text ->
-  GitLab (Either Status (Maybe IssueBoard))
+  GitLab (Either (Response BSL.ByteString) (Maybe IssueBoard))
 createIssueBoard' projectId boardName = do
   gitlabPost boardAddr T.empty
   where
@@ -96,7 +97,7 @@ updateIssueBoard' ::
   Int ->
   -- | attributes for updating boards
   UpdateBoardAttrs ->
-  GitLab (Either Status IssueBoard)
+  GitLab (Either (Response BSL.ByteString) IssueBoard)
 updateIssueBoard' projectId boardId attrs = do
   gitlabPut boardAddr T.empty
   where
@@ -114,7 +115,7 @@ deleteIssueBoard ::
   Project ->
   -- | the board
   IssueBoard ->
-  GitLab (Either Status ())
+  GitLab (Either (Response BSL.ByteString) ())
 deleteIssueBoard project board = do
   deleteIssueBoard' (project_id project) (board_id board)
 
@@ -124,7 +125,7 @@ deleteIssueBoard' ::
   Int ->
   -- | the board ID
   Int ->
-  GitLab (Either Status ())
+  GitLab (Either (Response BSL.ByteString) ())
 deleteIssueBoard' projectId boardId = do
   gitlabDelete boardAddr
   where
@@ -153,7 +154,7 @@ projectBoardLists' ::
   Int ->
   -- | board ID
   Int ->
-  GitLab (Either Status [BoardIssue])
+  GitLab (Either (Response BSL.ByteString) [BoardIssue])
 projectBoardLists' projectId boardId =
   gitlab boardsAddr
   where
@@ -183,7 +184,7 @@ boardList' ::
   Int ->
   -- | list ID
   Int ->
-  GitLab (Either Status (Maybe BoardIssue))
+  GitLab (Either (Response BSL.ByteString) (Maybe BoardIssue))
 boardList' projectId boardId listId =
   gitlabOne boardsAddr
   where
@@ -213,7 +214,7 @@ createBoardList' ::
   Int ->
   -- | attributes for creating the board
   CreateBoardAttrs ->
-  GitLab (Either Status (Maybe BoardIssue))
+  GitLab (Either (Response BSL.ByteString) (Maybe BoardIssue))
 createBoardList' projectId boardId attrs =
   gitlabPost boardsAddr T.empty
   where
@@ -236,7 +237,7 @@ reorderBoardList ::
   Int ->
   -- | the position of the list
   Int ->
-  GitLab (Either Status (Maybe BoardIssue))
+  GitLab (Either (Response BSL.ByteString) (Maybe BoardIssue))
 reorderBoardList project board =
   reorderBoardList' (project_id project) (board_id board)
 
@@ -250,7 +251,7 @@ reorderBoardList' ::
   Int ->
   -- | the position of the list
   Int ->
-  GitLab (Either Status (Maybe BoardIssue))
+  GitLab (Either (Response BSL.ByteString) (Maybe BoardIssue))
 reorderBoardList' projectId boardId listId newPosition =
   gitlabPut boardsAddr T.empty
   where
@@ -272,7 +273,7 @@ deleteBoardList ::
   IssueBoard ->
   -- | list ID
   Int ->
-  GitLab (Either Status ())
+  GitLab (Either (Response BSL.ByteString) ())
 deleteBoardList project board =
   deleteBoardList' (project_id project) (board_id board)
 
@@ -284,7 +285,7 @@ deleteBoardList' ::
   Int ->
   -- | list ID
   Int ->
-  GitLab (Either Status ())
+  GitLab (Either (Response BSL.ByteString) ())
 deleteBoardList' projectId boardId listId =
   gitlabDelete boardsAddr
   where

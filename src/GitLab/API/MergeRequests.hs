@@ -9,12 +9,13 @@
 -- Stability   : stable
 module GitLab.API.MergeRequests where
 
+import qualified Data.ByteString.Lazy as BSL
 import Data.Either
 import Data.Text (Text)
 import qualified Data.Text as T
 import GitLab.Types
 import GitLab.WebRequests.GitLabWebCalls
-import Network.HTTP.Types.Status
+import Network.HTTP.Client
 
 -- | returns the merge request for a project given its merge request
 -- IID.
@@ -23,7 +24,7 @@ mergeRequest ::
   Project ->
   -- | merge request IID
   Int ->
-  GitLab (Either Status (Maybe MergeRequest))
+  GitLab (Either (Response BSL.ByteString) (Maybe MergeRequest))
 mergeRequest project =
   mergeRequest' (project_id project)
 
@@ -34,7 +35,7 @@ mergeRequest' ::
   Int ->
   -- | merge request IID
   Int ->
-  GitLab (Either Status (Maybe MergeRequest))
+  GitLab (Either (Response BSL.ByteString) (Maybe MergeRequest))
 mergeRequest' projectId mergeRequestIID =
   gitlabOne addr
   where
@@ -57,7 +58,7 @@ mergeRequests p = do
 mergeRequests' ::
   -- | project ID
   Int ->
-  GitLab (Either Status [MergeRequest])
+  GitLab (Either (Response BSL.ByteString) [MergeRequest])
 mergeRequests' projectId =
   gitlabWithAttrs addr "&scope=all"
   where
@@ -80,7 +81,7 @@ createMergeRequest ::
   Text ->
   -- | merge request description
   Text ->
-  GitLab (Either Status (Maybe MergeRequest))
+  GitLab (Either (Response BSL.ByteString) (Maybe MergeRequest))
 createMergeRequest project =
   createMergeRequest' (project_id project)
 
@@ -98,7 +99,7 @@ createMergeRequest' ::
   Text ->
   -- | merge request description
   Text ->
-  GitLab (Either Status (Maybe MergeRequest))
+  GitLab (Either (Response BSL.ByteString) (Maybe MergeRequest))
 createMergeRequest' projectId sourceBranch targetBranch targetProjectId mrTitle mrDescription =
   gitlabPost addr dataBody
   where
@@ -119,7 +120,7 @@ acceptMergeRequest ::
   Project ->
   -- | merge request IID
   Int ->
-  GitLab (Either Status (Maybe MergeRequest))
+  GitLab (Either (Response BSL.ByteString) (Maybe MergeRequest))
 acceptMergeRequest project =
   acceptMergeRequest' (project_id project)
 
@@ -129,7 +130,7 @@ acceptMergeRequest' ::
   Int ->
   -- | merge request IID
   Int ->
-  GitLab (Either Status (Maybe MergeRequest))
+  GitLab (Either (Response BSL.ByteString) (Maybe MergeRequest))
 acceptMergeRequest' projectId mergeRequestIid = gitlabPost addr dataBody
   where
     dataBody :: Text
@@ -148,7 +149,7 @@ deleteMergeRequest ::
   Project ->
   -- | merge request IID
   Int ->
-  GitLab (Either Status ())
+  GitLab (Either (Response BSL.ByteString) ())
 deleteMergeRequest project =
   deleteMergeRequest' (project_id project)
 
@@ -158,7 +159,7 @@ deleteMergeRequest' ::
   Int ->
   -- | merge request IID
   Int ->
-  GitLab (Either Status ())
+  GitLab (Either (Response BSL.ByteString) ())
 deleteMergeRequest' projectId mergeRequestIid = gitlabDelete addr
   where
     addr =

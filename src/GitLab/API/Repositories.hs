@@ -15,7 +15,7 @@ import Data.Either
 import qualified Data.Text as T
 import GitLab.Types
 import GitLab.WebRequests.GitLabWebCalls
-import Network.HTTP.Types.Status
+import Network.HTTP.Client
 
 -- | returns a list of repository files and directories in a project.
 repositories ::
@@ -30,7 +30,7 @@ repositories project =
 repositories' ::
   -- | the project ID
   Int ->
-  GitLab (Either Status [Repository])
+  GitLab (Either (Response BSL.ByteString) [Repository])
 repositories' projectId =
   gitlab addr
   where
@@ -50,7 +50,7 @@ getFileArchive ::
   ArchiveFormat ->
   -- | file path to store the archive
   FilePath ->
-  GitLab (Either Status ())
+  GitLab (Either (Response BSL.ByteString) ())
 getFileArchive project = getFileArchive' (project_id project)
 
 -- | get a file archive of the repository files as a
@@ -62,7 +62,7 @@ getFileArchiveBS ::
   Project ->
   -- | file format
   ArchiveFormat ->
-  GitLab (Either Status BSL.ByteString)
+  GitLab (Either (Response BSL.ByteString) BSL.ByteString)
 getFileArchiveBS project = getFileArchiveBS' (project_id project)
 
 -- | get a file archive of the repository files using the project's
@@ -76,13 +76,13 @@ getFileArchive' ::
   ArchiveFormat ->
   -- | file path to store the archive
   FilePath ->
-  GitLab (Either Status ())
-getFileArchive' projectId format path = do
+  GitLab (Either (Response BSL.ByteString) ())
+getFileArchive' projectId format fPath = do
   attempt <- getFileArchiveBS' projectId format
   case attempt of
     Left st -> return (Left st)
     Right archiveData ->
-      Right <$> liftIO (BSL.writeFile path archiveData)
+      Right <$> liftIO (BSL.writeFile fPath archiveData)
 
 -- | get a file archive of the repository files as a 'BSL.ByteString'
 --   using the project's ID. For example:
@@ -93,7 +93,7 @@ getFileArchiveBS' ::
   Int ->
   -- | file format
   ArchiveFormat ->
-  GitLab (Either Status BSL.ByteString)
+  GitLab (Either (Response BSL.ByteString) BSL.ByteString)
 getFileArchiveBS' projectId format =
   gitlabReqByteString addr
   where

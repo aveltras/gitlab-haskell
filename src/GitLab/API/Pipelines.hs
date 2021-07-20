@@ -9,11 +9,12 @@
 -- Stability   : stable
 module GitLab.API.Pipelines where
 
+import qualified Data.ByteString.Lazy as BSL
 import Data.Either
 import qualified Data.Text as T
 import GitLab.Types
 import GitLab.WebRequests.GitLabWebCalls
-import Network.HTTP.Types.Status
+import Network.HTTP.Client
 
 -- | returns the pipelines for a project.
 pipelines ::
@@ -28,7 +29,7 @@ pipelines p = do
 pipelines' ::
   -- | the project ID
   Int ->
-  GitLab (Either Status [Pipeline])
+  GitLab (Either (Response BSL.ByteString) [Pipeline])
 pipelines' projectId =
   gitlabWithAttrs
     addr

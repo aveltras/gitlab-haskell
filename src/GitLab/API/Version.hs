@@ -9,12 +9,13 @@
 -- Stability   : stable
 module GitLab.API.Version where
 
+import qualified Data.ByteString.Lazy as BSL
 import GitLab.Types
 import GitLab.WebRequests.GitLabWebCalls
-import Network.HTTP.Types.Status
+import Network.HTTP.Client
 
 -- | Get the version of the GitLab server.
-gitlabVersion :: GitLab (Either Status (Maybe Version))
+gitlabVersion :: GitLab (Either (Response BSL.ByteString) (Maybe Version))
 gitlabVersion = do
-  let path = "/version"
-  gitlabOne path
+  let urlPath = "/version"
+  gitlabOne urlPath

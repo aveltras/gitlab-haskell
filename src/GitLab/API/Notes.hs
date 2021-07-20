@@ -9,11 +9,12 @@
 -- Stability   : stable
 module GitLab.API.Notes where
 
+import qualified Data.ByteString.Lazy as BSL
 import Data.Text (Text)
 import qualified Data.Text as T
 import GitLab.Types
 import GitLab.WebRequests.GitLabWebCalls
-import Network.HTTP.Types.Status
+import Network.HTTP.Client
 
 createMergeRequestNote ::
   -- | project
@@ -22,7 +23,7 @@ createMergeRequestNote ::
   Int ->
   -- | the note
   Text ->
-  GitLab (Either Status (Maybe ()))
+  GitLab (Either (Response BSL.ByteString) (Maybe ()))
 createMergeRequestNote project =
   createMergeRequestNote' (project_id project)
 
@@ -33,7 +34,7 @@ createMergeRequestNote' ::
   Int ->
   -- | the note
   Text ->
-  GitLab (Either Status (Maybe ()))
+  GitLab (Either (Response BSL.ByteString) (Maybe ()))
 createMergeRequestNote' projectId mergeRequestIID comment =
   gitlabPost addr dataBody
   where

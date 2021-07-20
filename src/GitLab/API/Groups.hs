@@ -10,6 +10,7 @@
 -- Stability   : stable
 module GitLab.API.Groups where
 
+import qualified Data.ByteString.Lazy as BSL
 import Data.Maybe
 import Data.Text (Text)
 import qualified Data.Text as T
@@ -18,7 +19,7 @@ import GitLab.API.Members
 import GitLab.API.Users
 import GitLab.Types
 import GitLab.WebRequests.GitLabWebCalls
-import Network.HTTP.Types.Status
+import Network.HTTP.Client
 import Network.HTTP.Types.URI
 
 -- | gets groups with the given group name or path.
@@ -27,7 +28,7 @@ import Network.HTTP.Types.URI
 groupsWithNameOrPath ::
   -- | group name being searched for.
   Text ->
-  GitLab (Either Status [Group])
+  GitLab (Either (Response BSL.ByteString) [Group])
 groupsWithNameOrPath groupName = do
   result <- gitlabWithAttrs "/groups" ("&search=" <> groupName)
   case result of
@@ -49,7 +50,7 @@ addAllUsersToGroup ::
   Text ->
   -- | level of access granted
   AccessLevel ->
-  GitLab [Either Status (Maybe Member)]
+  GitLab [Either (Response BSL.ByteString) (Maybe Member)]
 addAllUsersToGroup groupName access = do
   allRegisteredUsers <- allUsers
   let allUserIds = map user_username allRegisteredUsers
@@ -63,7 +64,7 @@ addUserToGroup ::
   AccessLevel ->
   -- | the user
   User ->
-  GitLab (Either Status (Maybe Member))
+  GitLab (Either (Response BSL.ByteString) (Maybe Member))
 addUserToGroup groupName access usr =
   addUserToGroup' groupName access (user_id usr)
 
@@ -75,12 +76,16 @@ addUserToGroup' ::
   AccessLevel ->
   -- | user ID
   Int ->
-  GitLab (Either Status (Maybe Member))
+  GitLab (Either (Response BSL.ByteString) (Maybe Member))
 addUserToGroup' groupName access usrId = do
   attempt <- groupsWithNameOrPath groupName
   case attempt of
-    Left httpStatus -> return (Left httpStatus)
-    Right [] -> return (Left (mkStatus 404 (T.encodeUtf8 (T.pack "cannot find group"))))
+    Left resp -> return (Left resp)
+    Right [] ->
+      -- TODO crreate response
+      error "foo"
+    -- return (Left (mk (Response BSL.ByteString) 404 (T.encodeUtf8 (T.pack "cannot find group"))))
+    -- return (Left (mk (Response (T.encodeUtf8 (T.pack "cannot find group"))))
     Right [grp] ->
       gitlabPost addr dataBody
       where
@@ -93,7 +98,11 @@ addUserToGroup' groupName access usrId = do
             <> T.decodeUtf8 (urlEncode False (T.encodeUtf8 (T.pack (show (group_id grp)))))
             <> "/members"
     Right (_ : _) ->
-      return (Left (mkStatus 404 (T.encodeUtf8 (T.pack "too many groups found"))))
+      -- return (Left (Response (T.encodeUtf8 (T.pack "too many groups found"))))
+      -- TODO crreate response
+      error "foo"
+
+-- return (Left (mk (Response BSL.ByteString) 404 (T.encodeUtf8 (T.pack "too many groups found"))))
 
 -- | adds a list of users to a group.
 addUsersToGroup ::
@@ -103,7 +112,7 @@ addUsersToGroup ::
   AccessLevel ->
   -- | list of usernames to be added to the group
   [User] ->
-  GitLab [Either Status (Maybe Member)]
+  GitLab [Either (Response BSL.ByteString) (Maybe Member)]
 addUsersToGroup groupName access =
   mapM (addUserToGroup groupName access)
 
@@ -115,7 +124,7 @@ addUsersToGroup' ::
   AccessLevel ->
   -- | list of usernames to be added to the group
   [Text] ->
-  GitLab [Either Status (Maybe Member)]
+  GitLab [Either (Response BSL.ByteString) (Maybe Member)]
 addUsersToGroup' groupName access usernames = do
   users <- catMaybes <$> mapM searchUser usernames
   mapM (addUserToGroup' groupName access . user_id) users
@@ -123,14 +132,14 @@ addUsersToGroup' groupName access usernames = do
 groupProjects ::
   -- | group
   Group ->
-  GitLab (Either Status [Project])
+  GitLab (Either (Response BSL.ByteString) [Project])
 groupProjects group = do
   groupProjects' (group_id group)
 
 groupProjects' ::
   -- | group ID
   Int ->
-  GitLab (Either Status [Project])
+  GitLab (Either (Response BSL.ByteString) [Project])
 groupProjects' groupID = do
   let urlPath =
         T.pack $

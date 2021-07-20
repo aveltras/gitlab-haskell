@@ -9,12 +9,13 @@
 -- Stability   : stable
 module GitLab.API.Tags where
 
+import qualified Data.ByteString.Lazy as BSL
 import Data.Either
 import Data.Text (Text)
 import qualified Data.Text as T
 import GitLab.Types
 import GitLab.WebRequests.GitLabWebCalls
-import Network.HTTP.Types.Status
+import Network.HTTP.Client
 
 -- | returns all commits with tags.
 tags ::
@@ -29,7 +30,7 @@ tags project = do
 tags' ::
   -- | project ID
   Int ->
-  GitLab (Either Status [Tag])
+  GitLab (Either (Response BSL.ByteString) [Tag])
 tags' projectId = do
   gitlabWithAttrs (commitsAddr projectId) ""
   where

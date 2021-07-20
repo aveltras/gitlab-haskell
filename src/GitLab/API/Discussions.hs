@@ -10,11 +10,12 @@
 -- Stability   : stable
 module GitLab.API.Discussions where
 
+import qualified Data.ByteString.Lazy as BSL
 import Data.Text (Text)
 import qualified Data.Text as T
 import GitLab.Types
 import GitLab.WebRequests.GitLabWebCalls
-import Network.HTTP.Types.Status
+import Network.HTTP.Client
 
 -- | gets all discussion for a commit for a project.
 commitDiscussions ::
@@ -22,7 +23,7 @@ commitDiscussions ::
   Project ->
   -- | commit hash
   Text ->
-  GitLab (Either Status [Discussion])
+  GitLab (Either (Response BSL.ByteString) [Discussion])
 commitDiscussions proj = commitDiscussions' (project_id proj)
 
 -- | gets all discussion for a commit for a project given its project ID.
@@ -31,7 +32,7 @@ commitDiscussions' ::
   Int ->
   -- | commit hash
   Text ->
-  GitLab (Either Status [Discussion])
+  GitLab (Either (Response BSL.ByteString) [Discussion])
 commitDiscussions' projId commitHash = do
   let urlPath =
         T.pack $

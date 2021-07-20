@@ -9,12 +9,13 @@
 -- Stability   : stable
 module GitLab.API.Commits where
 
+import qualified Data.ByteString.Lazy as BSL
 import Data.Either
 import Data.Text (Text)
 import qualified Data.Text as T
 import GitLab.Types
 import GitLab.WebRequests.GitLabWebCalls
-import Network.HTTP.Types.Status
+import Network.HTTP.Client
 
 -- | returns all commits for a project.
 projectCommits ::
@@ -30,7 +31,7 @@ projectCommits project = do
 projectCommits' ::
   -- | project ID
   Int ->
-  GitLab (Either Status [Commit])
+  GitLab (Either (Response BSL.ByteString) [Commit])
 projectCommits' projectId =
   gitlabWithAttrs (commitsAddr projectId) "&with_stats=true"
   where
@@ -57,7 +58,7 @@ branchCommits' ::
   Int ->
   -- | branch name
   Text ->
-  GitLab (Either Status [Commit])
+  GitLab (Either (Response BSL.ByteString) [Commit])
 branchCommits' projectId branchName = do
   gitlabWithAttrs (commitsAddr projectId) ("&ref_name=" <> branchName)
   where
@@ -84,7 +85,7 @@ commitDetails' ::
   Int ->
   -- | the commit hash
   Text ->
-  GitLab (Either Status (Maybe Commit))
+  GitLab (Either (Response BSL.ByteString) (Maybe Commit))
 commitDetails' projectId hash =
   gitlabOne (commitsAddr projectId)
   where

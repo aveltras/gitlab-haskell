@@ -32,6 +32,7 @@ module GitLab.API.Issues
 where
 
 import qualified Data.Aeson as J
+import qualified Data.ByteString.Lazy as BSL
 import Data.Either
 import Data.Maybe
 import Data.Text (Text)
@@ -42,7 +43,7 @@ import Data.Time.Clock
 import Data.Time.Format.ISO8601
 import GitLab.Types
 import GitLab.WebRequests.GitLabWebCalls
-import Network.HTTP.Types.Status
+import Network.HTTP.Client
 
 -- | No issue filters, thereby returning all issues. Default scope is "all".
 defaultIssueFilters :: IssueAttrs
@@ -138,11 +139,11 @@ projectIssues' ::
   -- | filter the issues, see https://docs.gitlab.com/ee/api/issues.html#list-issues
   IssueAttrs ->
   -- | the GitLab issues
-  GitLab (Either Status [Issue])
+  GitLab (Either (Response BSL.ByteString) [Issue])
 projectIssues' projectId attrs =
-  gitlab path
+  gitlab urlPath
   where
-    path =
+    urlPath =
       T.pack $
         "/projects/"
           <> show projectId
@@ -156,9 +157,9 @@ issueStatisticsUser ::
   -- | the issue statistics
   GitLab IssueStatistics
 issueStatisticsUser attrs =
-  gitlabOneUnsafe path
+  gitlabOneUnsafe urlPath
   where
-    path =
+    urlPath =
       T.pack $
         "/issues_statistics"
           <> issuesAttrs attrs
@@ -185,11 +186,11 @@ issueStatisticsGroup' ::
   -- | filter the issues, see https://docs.gitlab.com/ee/api/issues_statistics.html#get-issues-statistics
   IssueAttrs ->
   -- | the issue statistics
-  GitLab (Either Status (Maybe IssueStatistics))
+  GitLab (Either (Response BSL.ByteString) (Maybe IssueStatistics))
 issueStatisticsGroup' groupId attrs =
-  gitlabOne path
+  gitlabOne urlPath
   where
-    path =
+    urlPath =
       T.pack $
         "/groups/"
           <> show groupId
@@ -218,11 +219,11 @@ issueStatisticsProject' ::
   -- | filter the issues, see https://docs.gitlab.com/ee/api/issues_statistics.html#get-issues-statistics
   IssueAttrs ->
   -- | the issue statistics
-  GitLab (Either Status (Maybe IssueStatistics))
+  GitLab (Either (Response BSL.ByteString) (Maybe IssueStatistics))
 issueStatisticsProject' projId attrs =
-  gitlabOne path
+  gitlabOne urlPath
   where
-    path =
+    urlPath =
       T.pack $
         "/projects/"
           <> show projId
@@ -252,7 +253,7 @@ newIssue ::
   Text ->
   -- | issue description
   Text ->
-  GitLab (Either Status (Maybe Issue))
+  GitLab (Either (Response BSL.ByteString) (Maybe Issue))
 newIssue project =
   newIssue' (project_id project)
 
@@ -264,7 +265,7 @@ newIssue' ::
   Text ->
   -- | issue description
   Text ->
-  GitLab (Either Status (Maybe Issue))
+  GitLab (Either (Response BSL.ByteString) (Maybe Issue))
 newIssue' projectId issueTitle issueDescription =
   gitlabPost addr dataBody
   where
@@ -284,14 +285,14 @@ editIssue ::
   ProjectId ->
   IssueId ->
   EditIssueReq ->
-  GitLab (Either Status Issue)
+  GitLab (Either (Response BSL.ByteString) Issue)
 editIssue projId issueId editIssueReq = do
-  let path =
+  let urlPath =
         "/projects/" <> T.pack (show projId)
           <> "/issues/"
           <> T.pack (show issueId)
   gitlabPut
-    path
+    urlPath
     ( Data.Text.Lazy.toStrict
         ( Data.Text.Lazy.Encoding.decodeUtf8
             (J.encode editIssueReq)

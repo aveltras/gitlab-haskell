@@ -9,11 +9,12 @@
 -- Stability   : stable
 module GitLab.API.Jobs where
 
+import qualified Data.ByteString.Lazy as BSL
 import Data.Either
 import qualified Data.Text as T
 import GitLab.Types
 import GitLab.WebRequests.GitLabWebCalls
-import Network.HTTP.Types.Status
+import Network.HTTP.Client
 
 -- | returns all jobs ran on a project.
 jobs ::
@@ -28,7 +29,7 @@ jobs project = do
 jobs' ::
   -- | the project ID
   Int ->
-  GitLab (Either Status [Job])
+  GitLab (Either (Response BSL.ByteString) [Job])
 jobs' projectId =
   gitlab addr
   where

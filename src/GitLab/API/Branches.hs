@@ -9,11 +9,12 @@
 -- Stability   : stable
 module GitLab.API.Branches where
 
+import qualified Data.ByteString.Lazy as BSL
 import Data.Either
 import qualified Data.Text as T
 import GitLab.Types
 import GitLab.WebRequests.GitLabWebCalls
-import Network.HTTP.Types.Status
+import Network.HTTP.Client
 
 -- | Get a list of repository branches from a project, sorted by name
 -- alphabetically.
@@ -24,7 +25,7 @@ branches project = do
 
 -- | Get a list of repository branches from a project given its
 -- project ID, sorted by name alphabetically.
-branches' :: Int -> GitLab (Either Status [Branch])
+branches' :: Int -> GitLab (Either (Response BSL.ByteString) [Branch])
 branches' projectId =
   gitlab addr
   where
