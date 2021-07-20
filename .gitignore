@@ -29,8 +29,11 @@ cabal.project.local~
 #*
 *#
 .#*
-examples/Main
-examples/FileHook
 *~
 ~*
 .hie/
+
+examples/Main
+examples/FileHook
+examples/GitLabCommit
+examples/UserProjects
