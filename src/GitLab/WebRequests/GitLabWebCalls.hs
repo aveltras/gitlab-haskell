@@ -3,20 +3,13 @@
 
 -- | internal module to support modules in GitLab.API
 module GitLab.WebRequests.GitLabWebCalls
-  ( gitlab,
-    gitlabUnsafe,
-    gitlabOneUnsafe,
-    gitlabWithAttrs,
-    gitlabWithAttrsUnsafe,
-    gitlabOne,
-    -- gitlabOneIO,
-    gitlabWithAttrsOne,
-    gitlabWithAttrsOneUnsafe,
+  ( GitLabParam,
+    gitlabGetOne,
+    gitlabGetMany,
     gitlabPost,
     gitlabPut,
     gitlabDelete,
-    gitlabReqText,
-    gitlabReqByteString,
+    gitlabUnsafe,
   )
 where
 
@@ -24,10 +17,8 @@ import qualified Control.Exception as Exception
 import Control.Monad.IO.Class
 import Control.Monad.Trans.Reader
 import Data.Aeson
-import qualified Data.ByteString as BS
+import Data.ByteString
 import qualified Data.ByteString.Lazy as BSL
-import qualified Data.ByteString.Lazy.Char8 as C
-import Data.Either
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
@@ -42,97 +33,216 @@ newtype GitLabException = GitLabException String
 
 instance Exception.Exception GitLabException
 
--- In this module, "unsafe" functions are those that discard HTTP
--- error code responses, e.g. 404, 409.
+type GitLabParam = (ByteString, Maybe ByteString)
+
+gitlabGetOne ::
+  (FromJSON a) =>
+  -- | the URL to post to
+  Text ->
+  -- | the data to post
+  [GitLabParam] ->
+  GitLab (Either (Response BSL.ByteString) (Maybe a))
+gitlabGetOne urlPath params =
+  request
+  where
+    request =
+      gitlabHTTPOne
+        "GET"
+        "application/x-www-form-urlencoded"
+        urlPath
+        params
+        []
+
+gitlabGetMany ::
+  (FromJSON a) =>
+  -- | the URL to post to
+  Text ->
+  -- | the data to post
+  [GitLabParam] ->
+  GitLab (Either (Response BSL.ByteString) [a])
+gitlabGetMany urlPath params =
+  gitlabHTTPMany
+    "GET"
+    "application/x-www-form-urlencoded"
+    urlPath
+    params
+    []
 
 gitlabPost ::
-  (FromJSON b) =>
+  (FromJSON a) =>
   -- | the URL to post to
   Text ->
   -- | the data to post
-  Text ->
-  GitLab (Either (Response BSL.ByteString) (Maybe b))
-gitlabPost urlPath dataBody = do
-  cfg <- serverCfg <$> ask
-  manager <- httpManager <$> ask
-  let url' = url cfg <> "/api/v4" <> urlPath
-  let request' = parseRequest_ (T.unpack url')
-      request =
-        request'
-          { method = "POST",
-            requestHeaders =
-              [ ("PRIVATE-TOKEN", T.encodeUtf8 (token cfg)),
-                ("content-type", "application/x-www-form-urlencoded")
-              ],
-            requestBody = RequestBodyBS (T.encodeUtf8 dataBody)
-          }
-  resp <- liftIO $ tryGitLab 0 request (retries cfg) manager Nothing
-  if successStatus (responseStatus resp)
-    then
-      return
-        ( case parseBSOne (responseBody resp) of
-            Just x -> Right (Just x)
-            Nothing -> Right Nothing
-            -- Nothing ->
-            --   Left $
-            --     mkStatus 409 "unable to parse POST response"
-        )
-    else return (Left resp)
+  [GitLabParam] ->
+  GitLab (Either (Response BSL.ByteString) (Maybe a))
+gitlabPost urlPath params = do
+  request
+  where
+    request =
+      gitlabHTTPOne
+        "POST"
+        "application/x-www-form-urlencoded"
+        urlPath
+        []
+        params
 
 gitlabPut ::
-  FromJSON b =>
+  FromJSON a =>
   -- | the URL to post to
   Text ->
   -- | the data to post
-  Text ->
-  GitLab (Either (Response BSL.ByteString) b)
-gitlabPut urlPath dataBody = do
-  cfg <- serverCfg <$> ask
-  manager <- httpManager <$> ask
-  let url' = url cfg <> "/api/v4" <> urlPath
-  let request' = parseRequest_ (T.unpack url')
-      request =
-        request'
-          { method = "PUT",
-            requestHeaders =
-              [ ("PRIVATE-TOKEN", T.encodeUtf8 (token cfg)),
-                ("content-type", "application/x-www-form-urlencoded")
-              ],
-            requestBody = RequestBodyBS (T.encodeUtf8 dataBody)
-          }
-  resp <- liftIO $ tryGitLab 0 request (retries cfg) manager Nothing
-  if successStatus (responseStatus resp)
-    then
-      return
-        ( case parseBSOne (responseBody resp) of
-            Just x -> Right x
-            Nothing ->
-              Left resp
-        )
-    else return (Left resp)
+  [GitLabParam] ->
+  GitLab (Either (Response BSL.ByteString) (Maybe a))
+gitlabPut urlPath params = do
+  request
+  where
+    request =
+      gitlabHTTPOne
+        "PUT"
+        "application/x-www-form-urlencoded"
+        urlPath
+        []
+        params
 
 gitlabDelete ::
   -- | the URL to post to
   Text ->
-  GitLab (Either (Response BSL.ByteString) ())
+  GitLab (Either (Response BSL.ByteString) (Maybe ()))
 gitlabDelete urlPath = do
+  result <- request
+  case result of
+    Right (Just _) -> return (Right (Just ()))
+    x -> return x
+  where
+    request =
+      gitlabHTTPOne
+        "DELETE"
+        "application/x-www-form-urlencoded"
+        urlPath
+        []
+        []
+
+-- | Assumes that HTTP error code responses, e.g. 404, 409, won't be
+-- returned as (Left response) value.
+gitlabUnsafe :: GitLab (Either a (Maybe b)) -> GitLab b
+gitlabUnsafe query = do
+  result <- query
+  case result of
+    Left _err -> error "gitlabUnsafe error"
+    Right Nothing -> error "gitlabUnsafe error"
+    Right (Just x) -> return x
+
+---------------------
+-- internal functions
+
+gitlabHTTP ::
+  -- | HTTP method (PUT, POST, DELETE, GET)
+  ByteString ->
+  -- | Content type (content-type)
+  ByteString ->
+  -- | the URL
+  Text ->
+  -- | the URL parameters for GET calls
+  [GitLabParam] ->
+  -- | the content paramters for POST, PUT and DELETE calls
+  [GitLabParam] ->
+  GitLab (Response BSL.ByteString)
+gitlabHTTP httpMethod contentType urlPath urlParams contentParams = do
   cfg <- serverCfg <$> ask
   manager <- httpManager <$> ask
-  let url' = url cfg <> "/api/v4" <> urlPath
+  let url' = url cfg <> "/api/v4" <> urlPath <> T.decodeUtf8 (renderQuery True urlParams)
   let request' = parseRequest_ (T.unpack url')
       request =
         request'
-          { method = "DELETE",
+          { method = httpMethod,
             requestHeaders =
               [ ("PRIVATE-TOKEN", T.encodeUtf8 (token cfg)),
-                ("content-type", "application/x-www-form-urlencoded")
+                ("content-type", contentType)
               ],
-            requestBody = RequestBodyBS BS.empty
+            requestBody = RequestBodyBS (renderQuery False contentParams)
           }
-  resp <- liftIO $ tryGitLab 0 request (retries cfg) manager Nothing
-  if successStatus (responseStatus resp)
-    then return (Right ())
-    else return (Left resp)
+  response <- liftIO $ tryGitLab 0 request (retries cfg) manager Nothing
+  return response
+
+gitlabHTTPOne ::
+  FromJSON a =>
+  -- | HTTP method (PUT, POST, DELETE, GET)
+  ByteString ->
+  -- | Content type (content-type)
+  ByteString ->
+  -- | the URL
+  Text ->
+  -- | the URL query data for GET calls
+  [GitLabParam] ->
+  -- | the content parameters for POST, PUT and DELETE calls
+  [GitLabParam] ->
+  GitLab
+    (Either (Response BSL.ByteString) (Maybe a))
+gitlabHTTPOne httpMethod contentType urlPath urlParams contentParams = do
+  response <-
+    gitlabHTTP
+      httpMethod
+      contentType
+      urlPath
+      urlParams
+      contentParams
+  if successStatus (responseStatus response)
+    then return (Right (parseOne (responseBody response)))
+    else return (Left response)
+
+gitlabHTTPMany ::
+  (FromJSON a) =>
+  -- | HTTP method (PUT, POST, DELETE, GET)
+  ByteString ->
+  -- | Content type (content-type)
+  ByteString ->
+  -- | the URL
+  Text ->
+  -- | the URL query data for GET calls
+  [GitLabParam] ->
+  -- | the content parameters for POST, PUT and DELETE calls
+  [GitLabParam] ->
+  GitLab
+    (Either (Response BSL.ByteString) [a])
+gitlabHTTPMany httpMethod contentType urlPath urlParams contentParams = do
+  go 1 []
+  where
+    go :: FromJSON a => Int -> [a] -> GitLab (Either (Response BSL.ByteString) [a])
+    go pageNum accum = do
+      response <-
+        gitlabHTTP
+          httpMethod
+          contentType
+          urlPath
+          (urlParams <> [("per_page", Just "100"), ("page", Just (T.encodeUtf8 (T.pack (show pageNum))))])
+          contentParams
+      if successStatus (responseStatus response)
+        then do
+          case parseMany (responseBody response) of
+            Nothing -> return (Right accum)
+            Just moreResults -> do
+              let numPages = totalPages response
+                  accum' = accum <> moreResults
+              if pageNum == numPages
+                then return (Right accum')
+                else go (pageNum + 1) accum'
+        else return (Left response)
+
+totalPages :: Response a -> Int
+totalPages resp =
+  let hdrs = responseHeaders resp
+   in findPages hdrs
+  where
+    findPages [] = 1 -- error "cannot find X-Total-Pages in header"
+    findPages (("X-Total-Pages", bs) : _) =
+      case readMaybe (T.unpack (T.decodeUtf8 bs)) of
+        Just s -> s
+        Nothing -> error "cannot find X-Total-Pages in header"
+    findPages (_ : xs) = findPages xs
+
+successStatus :: Status -> Bool
+successStatus (Status n _msg) =
+  n >= 200 && n <= 226
 
 tryGitLab ::
   -- | the current retry count
@@ -152,181 +262,14 @@ tryGitLab i request maxRetries manager lastException
     httpLbs request manager
       `Exception.catch` \ex -> tryGitLab (i + 1) request maxRetries manager (Just ex)
 
-parseBSOne :: FromJSON a => BSL.ByteString -> Maybe a
-parseBSOne bs =
+parseOne :: FromJSON a => BSL.ByteString -> Maybe a
+parseOne bs =
   case eitherDecode bs of
     Left _err -> Nothing
-    -- useful when debugging
-    Right xs -> Just xs
+    Right x -> Just x
 
-parseBSMany :: FromJSON a => BSL.ByteString -> IO [a]
-parseBSMany bs =
+parseMany :: FromJSON a => BSL.ByteString -> Maybe [a]
+parseMany bs =
   case eitherDecode bs of
-    Left s -> Exception.throwIO $ GitLabException s
-    Right xs -> return xs
-
-gitlabReqJsonMany :: (FromJSON a) => Text -> Text -> GitLab (Either (Response BSL.ByteString) [a])
-gitlabReqJsonMany urlPath attrs =
-  go 1 []
-  where
-    go i accum = do
-      cfg <- serverCfg <$> ask
-      manager <- httpManager <$> ask
-      let url' =
-            url cfg
-              <> "/api/v4"
-              <> urlPath
-              <> ( if (hasQuestionMark urlPath)
-                     then "&"
-                     else "?"
-                 )
-              <> "per_page=100"
-              <> "&page="
-              <> T.pack (show i)
-              <> T.decodeUtf8 (urlEncode False (T.encodeUtf8 attrs))
-      let request' = parseRequest_ (T.unpack url')
-          request =
-            request'
-              { requestHeaders =
-                  [("PRIVATE-TOKEN", T.encodeUtf8 (token cfg))],
-                responseTimeout = responseTimeoutMicro (timeout cfg)
-              }
-      resp <- liftIO $ tryGitLab 0 request (retries cfg) manager Nothing
-      if successStatus (responseStatus resp)
-        then do
-          moreResults <- liftIO $ parseBSMany (responseBody resp)
-          let numPages = totalPages resp
-              accum' = accum ++ moreResults
-          if numPages == i
-            then return (Right accum')
-            else go (i + 1) accum'
-        else return (Left resp)
-
--- not sure what this was planned for
---
--- gitlabReqOneIO :: Manager -> GitLabServerConfig -> (BSL.ByteString -> output) -> Text -> Text -> IO (Either Status output)
--- gitlabReqOneIO manager cfg parser urlPath attrs = go
---   where
---     go = do
---       let url' =
---             url cfg
---               <> "/api/v4"
---               <> urlPath
---               <> "?per_page=100"
---               <> "&page=1"
---               <> attrs
---       let request' = parseRequest_ (T.unpack url')
---           request =
---             request'
---               { requestHeaders =
---                   [("PRIVATE-TOKEN", T.encodeUtf8 (token cfg))],
---                 responseTimeout = responseTimeoutMicro (timeout cfg)
---               }
---       resp <- tryGitLab 0 request (retries cfg) manager Nothing
---       if successStatus (responseStatus resp)
---         then return (Right (parser (responseBody resp)))
---         else return (Left (responseStatus resp))
-
-gitlabReqOne :: (BSL.ByteString -> output) -> Text -> Text -> GitLab (Either (Response BSL.ByteString) output)
-gitlabReqOne parser urlPath attrs = go
-  where
-    go = do
-      cfg <- serverCfg <$> ask
-      manager <- httpManager <$> ask
-      let url' =
-            url cfg
-              <> "/api/v4"
-              <> urlPath
-              <> ( if (hasQuestionMark urlPath)
-                     then "&"
-                     else "?"
-                 )
-              <> "per_page=100"
-              <> "&page=1"
-              <> attrs
-      let request' = parseRequest_ (T.unpack url')
-          request =
-            request'
-              { requestHeaders =
-                  [("PRIVATE-TOKEN", T.encodeUtf8 (token cfg))],
-                responseTimeout = responseTimeoutMicro (timeout cfg)
-              }
-      resp <- liftIO $ tryGitLab 0 request (retries cfg) manager Nothing
-      if successStatus (responseStatus resp)
-        then return (Right (parser (responseBody resp)))
-        else return (Left resp)
-
--- not sure what this was planned for
---
--- gitlabReqJsonOneIO :: (FromJSON a) => Manager -> GitLabServerConfig -> Text -> Text -> IO (Either Status (Maybe a))
--- gitlabReqJsonOneIO mgr cfg urlPath attrs =
---   gitlabReqOneIO mgr cfg parseBSOne urlPath attrs
-
-gitlabReqJsonOne :: (FromJSON a) => Text -> Text -> GitLab (Either (Response BSL.ByteString) (Maybe a))
-gitlabReqJsonOne =
-  gitlabReqOne parseBSOne
-
-gitlabReqText :: Text -> GitLab (Either (Response BSL.ByteString) String)
-gitlabReqText urlPath = gitlabReqOne C.unpack urlPath ""
-
-gitlabReqByteString :: Text -> GitLab (Either (Response BSL.ByteString) BSL.ByteString)
-gitlabReqByteString urlPath = gitlabReqOne Prelude.id urlPath ""
-
-gitlab :: FromJSON a => Text -> GitLab (Either (Response BSL.ByteString) [a])
-gitlab addr = gitlabReqJsonMany addr ""
-
-gitlabUnsafe :: (FromJSON a) => Text -> GitLab [a]
-gitlabUnsafe addr =
-  fromRight (error "gitlabUnsafe error") <$> gitlab addr
-
--- not sure what this was planned for
---
--- gitlabOneIO :: (FromJSON a) => Manager -> GitLabServerConfig -> Text -> IO (Either Status (Maybe a))
--- gitlabOneIO mgr cfg addr = gitlabReqJsonOneIO mgr cfg addr ""
-
-gitlabOne :: (FromJSON a) => Text -> GitLab (Either (Response BSL.ByteString) (Maybe a))
-gitlabOne addr = gitlabReqJsonOne addr ""
-
-gitlabOneUnsafe :: (FromJSON a) => Text -> GitLab a
-gitlabOneUnsafe addr = do
-  result <- fromRight (error "gitlabOneUnsafe error") <$> gitlabOne addr
-  case result of
-    Nothing -> error "gitlabOneUnsafe error"
-    Just value -> return value
-
-gitlabWithAttrs :: (FromJSON a) => Text -> Text -> GitLab (Either (Response BSL.ByteString) [a])
-gitlabWithAttrs = gitlabReqJsonMany
-
-gitlabWithAttrsUnsafe :: (FromJSON a) => Text -> Text -> GitLab [a]
-gitlabWithAttrsUnsafe gitlabURL attrs =
-  fromRight (error "gitlabWithAttrsUnsafe error") <$> gitlabReqJsonMany gitlabURL attrs
-
-gitlabWithAttrsOne :: (FromJSON a) => Text -> Text -> GitLab (Either (Response BSL.ByteString) (Maybe a))
-gitlabWithAttrsOne = gitlabReqJsonOne
-
-gitlabWithAttrsOneUnsafe :: (FromJSON a) => Text -> Text -> GitLab a
-gitlabWithAttrsOneUnsafe gitlabURL attrs = do
-  result <- gitlabReqJsonOne gitlabURL attrs
-  case result of
-    Left s -> error ("gitlabWithAttrsOneUnsafe: " <> show s)
-    Right Nothing -> error ("gitlabWithAttrsOneUnsafe: could not parse JSON for " <> show attrs)
-    Right (Just x) -> return x
-
-totalPages :: Response a -> Int
-totalPages resp =
-  let hdrs = responseHeaders resp
-   in findPages hdrs
-  where
-    findPages [] = 1 -- error "cannot find X-Total-Pages in header"
-    findPages (("X-Total-Pages", bs) : _) =
-      case readMaybe (T.unpack (T.decodeUtf8 bs)) of
-        Just s -> s
-        Nothing -> error "cannot find X-Total-Pages in header"
-    findPages (_ : xs) = findPages xs
-
-successStatus :: Status -> Bool
-successStatus (Status n _msg) =
-  n >= 200 && n <= 226
-
-hasQuestionMark :: Text -> Bool
-hasQuestionMark = T.isInfixOf "?"
+    Left _err -> Nothing
+    Right xs -> Just xs
