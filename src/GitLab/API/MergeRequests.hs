@@ -13,6 +13,7 @@ import qualified Data.ByteString.Lazy as BSL
 import Data.Either
 import Data.Text (Text)
 import qualified Data.Text as T
+import qualified Data.Text.Encoding as T
 import GitLab.Types
 import GitLab.WebRequests.GitLabWebCalls
 import Network.HTTP.Client
@@ -37,7 +38,7 @@ mergeRequest' ::
   Int ->
   GitLab (Either (Response BSL.ByteString) (Maybe MergeRequest))
 mergeRequest' projectId mergeRequestIID =
-  gitlabOne addr
+  gitlabGetOne addr []
   where
     addr =
       "/projects/"
@@ -60,7 +61,7 @@ mergeRequests' ::
   Int ->
   GitLab (Either (Response BSL.ByteString) [MergeRequest])
 mergeRequests' projectId =
-  gitlabWithAttrs addr "&scope=all"
+  gitlabGetMany addr [("scope", Just "all")]
   where
     addr =
       "/projects/"
@@ -101,17 +102,16 @@ createMergeRequest' ::
   Text ->
   GitLab (Either (Response BSL.ByteString) (Maybe MergeRequest))
 createMergeRequest' projectId sourceBranch targetBranch targetProjectId mrTitle mrDescription =
-  gitlabPost addr dataBody
+  gitlabPost addr params
   where
-    dataBody :: Text
-    dataBody =
-      "source_branch=" <> sourceBranch <> "&target_branch=" <> targetBranch
-        <> "&target_project_id="
-        <> T.pack (show targetProjectId)
-        <> "&title="
-        <> mrTitle
-        <> "&description="
-        <> mrDescription
+    params :: [GitLabParam]
+    params =
+      [ ("source_branch", Just (T.encodeUtf8 sourceBranch)),
+        ("target_branch", Just (T.encodeUtf8 targetBranch)),
+        ("target_project_id", Just (T.encodeUtf8 (T.pack (show targetProjectId)))),
+        ("title", Just (T.encodeUtf8 mrTitle)),
+        ("description", Just (T.encodeUtf8 mrDescription))
+      ]
     addr = T.pack $ "/projects/" <> show projectId <> "/merge_requests"
 
 -- | Accepts a merge request.
@@ -131,12 +131,13 @@ acceptMergeRequest' ::
   -- | merge request IID
   Int ->
   GitLab (Either (Response BSL.ByteString) (Maybe MergeRequest))
-acceptMergeRequest' projectId mergeRequestIid = gitlabPost addr dataBody
+acceptMergeRequest' projectId mergeRequestIid = gitlabPost addr params
   where
-    dataBody :: Text
-    dataBody =
-      T.pack $
-        "id=" <> show projectId <> "&merge_request_iid=" <> show mergeRequestIid
+    params :: [GitLabParam]
+    params =
+      [ ("id", Just (T.encodeUtf8 (T.pack (show projectId)))),
+        ("merge_request_iid", Just (T.encodeUtf8 (T.pack (show mergeRequestIid))))
+      ]
     addr =
       T.pack $
         "/projects/" <> show projectId <> "/merge_requests/"
@@ -149,7 +150,7 @@ deleteMergeRequest ::
   Project ->
   -- | merge request IID
   Int ->
-  GitLab (Either (Response BSL.ByteString) ())
+  GitLab (Either (Response BSL.ByteString) (Maybe ()))
 deleteMergeRequest project =
   deleteMergeRequest' (project_id project)
 
@@ -159,7 +160,7 @@ deleteMergeRequest' ::
   Int ->
   -- | merge request IID
   Int ->
-  GitLab (Either (Response BSL.ByteString) ())
+  GitLab (Either (Response BSL.ByteString) (Maybe ()))
 deleteMergeRequest' projectId mergeRequestIid = gitlabDelete addr
   where
     addr =

@@ -14,6 +14,7 @@ import Data.Either
 import Data.Maybe
 import Data.Text (Text)
 import qualified Data.Text as T
+import qualified Data.Text.Encoding as T
 import GitLab.Types
 import GitLab.WebRequests.GitLabWebCalls
 import Network.HTTP.Client
@@ -34,7 +35,7 @@ projectIssueBoards' ::
   Int ->
   GitLab (Either (Response BSL.ByteString) [IssueBoard])
 projectIssueBoards' projectId =
-  gitlab (boardsAddr projectId)
+  gitlabGetMany (boardsAddr projectId) []
   where
     boardsAddr :: Int -> Text
     boardsAddr projId =
@@ -58,7 +59,7 @@ projectIssueBoard' ::
   Int ->
   GitLab (Either (Response BSL.ByteString) (Maybe IssueBoard))
 projectIssueBoard' projectId boardId = do
-  gitlabOne boardAddr
+  gitlabGetOne boardAddr []
   where
     boardAddr :: Text
     boardAddr =
@@ -83,11 +84,11 @@ createIssueBoard' ::
   Text ->
   GitLab (Either (Response BSL.ByteString) (Maybe IssueBoard))
 createIssueBoard' projectId boardName = do
-  gitlabPost boardAddr T.empty
+  gitlabPost boardAddr [("name", Just (T.encodeUtf8 boardName))]
   where
     boardAddr :: Text
     boardAddr =
-      "/projects/" <> T.pack (show projectId) <> "/boards/?name=" <> boardName
+      "/projects/" <> T.pack (show projectId) <> "/boards"
 
 -- | Updates a project issue board.
 updateIssueBoard' ::
@@ -97,9 +98,9 @@ updateIssueBoard' ::
   Int ->
   -- | attributes for updating boards
   UpdateBoardAttrs ->
-  GitLab (Either (Response BSL.ByteString) IssueBoard)
+  GitLab (Either (Response BSL.ByteString) (Maybe IssueBoard))
 updateIssueBoard' projectId boardId attrs = do
-  gitlabPut boardAddr T.empty
+  gitlabPut boardAddr (updateBoardAttrs attrs)
   where
     boardAddr :: Text
     boardAddr =
@@ -107,7 +108,6 @@ updateIssueBoard' projectId boardId attrs = do
         <> T.pack (show projectId)
         <> "/boards/"
         <> T.pack (show boardId)
-        <> T.pack (updateBoardAttrs attrs)
 
 -- | Deletes a project issue board.
 deleteIssueBoard ::
@@ -115,7 +115,7 @@ deleteIssueBoard ::
   Project ->
   -- | the board
   IssueBoard ->
-  GitLab (Either (Response BSL.ByteString) ())
+  GitLab (Either (Response BSL.ByteString) (Maybe ()))
 deleteIssueBoard project board = do
   deleteIssueBoard' (project_id project) (board_id board)
 
@@ -125,7 +125,7 @@ deleteIssueBoard' ::
   Int ->
   -- | the board ID
   Int ->
-  GitLab (Either (Response BSL.ByteString) ())
+  GitLab (Either (Response BSL.ByteString) (Maybe ()))
 deleteIssueBoard' projectId boardId = do
   gitlabDelete boardAddr
   where
@@ -156,7 +156,7 @@ projectBoardLists' ::
   Int ->
   GitLab (Either (Response BSL.ByteString) [BoardIssue])
 projectBoardLists' projectId boardId =
-  gitlab boardsAddr
+  gitlabGetMany boardsAddr []
   where
     boardsAddr :: Text
     boardsAddr =
@@ -186,7 +186,7 @@ boardList' ::
   Int ->
   GitLab (Either (Response BSL.ByteString) (Maybe BoardIssue))
 boardList' projectId boardId listId =
-  gitlabOne boardsAddr
+  gitlabGetOne boardsAddr []
   where
     boardsAddr :: Text
     boardsAddr =
@@ -216,7 +216,7 @@ createBoardList' ::
   CreateBoardAttrs ->
   GitLab (Either (Response BSL.ByteString) (Maybe BoardIssue))
 createBoardList' projectId boardId attrs =
-  gitlabPost boardsAddr T.empty
+  gitlabPost boardsAddr (createBoardAttrs attrs)
   where
     boardsAddr :: Text
     boardsAddr =
@@ -225,7 +225,6 @@ createBoardList' projectId boardId attrs =
         <> "/boards/"
         <> T.pack (show boardId)
         <> "/lists"
-        <> T.pack (createBoardAttrs attrs)
 
 -- | Updates an existing issue board list. This call is used to change list position.
 reorderBoardList ::
@@ -253,7 +252,7 @@ reorderBoardList' ::
   Int ->
   GitLab (Either (Response BSL.ByteString) (Maybe BoardIssue))
 reorderBoardList' projectId boardId listId newPosition =
-  gitlabPut boardsAddr T.empty
+  gitlabPut boardsAddr [("position", Just (T.encodeUtf8 (T.pack (show newPosition))))]
   where
     boardsAddr :: Text
     boardsAddr =
@@ -263,7 +262,6 @@ reorderBoardList' projectId boardId listId newPosition =
         <> T.pack (show boardId)
         <> "/lists/"
         <> T.pack (show listId)
-        <> T.pack ("?position=" <> show newPosition)
 
 -- | Only for administrators and project owners. Deletes a board list.
 deleteBoardList ::
@@ -273,7 +271,7 @@ deleteBoardList ::
   IssueBoard ->
   -- | list ID
   Int ->
-  GitLab (Either (Response BSL.ByteString) ())
+  GitLab (Either (Response BSL.ByteString) (Maybe ()))
 deleteBoardList project board =
   deleteBoardList' (project_id project) (board_id board)
 
@@ -285,7 +283,7 @@ deleteBoardList' ::
   Int ->
   -- | list ID
   Int ->
-  GitLab (Either (Response BSL.ByteString) ())
+  GitLab (Either (Response BSL.ByteString) (Maybe ()))
 deleteBoardList' projectId boardId listId =
   gitlabDelete boardsAddr
   where
@@ -311,20 +309,15 @@ noUpdateBoardAttrs :: UpdateBoardAttrs
 noUpdateBoardAttrs =
   UpdateBoardAttrs Nothing Nothing Nothing Nothing Nothing
 
-updateBoardAttrs :: UpdateBoardAttrs -> String
+updateBoardAttrs :: UpdateBoardAttrs -> [GitLabParam]
 updateBoardAttrs attrs =
-  case attrsUrl of
-    [] -> ""
-    (x : xs) -> "?" <> x <> concatMap ('&' :) xs
-  where
-    attrsUrl =
-      catMaybes
-        [ (\s -> Just ("name=" <> s)) =<< updateBoard_new_name attrs,
-          (\i -> Just ("assignee_id=" <> show i)) =<< updateBoard_assignee_id attrs,
-          (\i -> Just ("milestone_id=" <> show i)) =<< updateBoard_milestone_id attrs,
-          (\s -> Just ("labels=" <> s)) =<< updateBoard_labels attrs,
-          (\i -> Just ("weight=" <> show i)) =<< updateBoard_weight attrs
-        ]
+  catMaybes
+    [ (\s -> Just ("name", Just (T.encodeUtf8 (T.pack s)))) =<< updateBoard_new_name attrs,
+      (\i -> Just ("assignee_id", Just (T.encodeUtf8 (T.pack (show i))))) =<< updateBoard_assignee_id attrs,
+      (\i -> Just ("milestone_id", Just (T.encodeUtf8 (T.pack (show i))))) =<< updateBoard_milestone_id attrs,
+      (\s -> Just ("labels", Just (T.encodeUtf8 (T.pack s)))) =<< updateBoard_labels attrs,
+      (\i -> Just ("weight", Just (T.encodeUtf8 (T.pack (show i))))) =<< updateBoard_weight attrs
+    ]
 
 -- | exactly one parameter must be provided.
 data CreateBoardAttrs = CreateBoardAttrs
@@ -338,15 +331,10 @@ noCreateBoardAttrs :: CreateBoardAttrs
 noCreateBoardAttrs =
   CreateBoardAttrs Nothing Nothing Nothing
 
-createBoardAttrs :: CreateBoardAttrs -> String
+createBoardAttrs :: CreateBoardAttrs -> [GitLabParam]
 createBoardAttrs attrs =
-  case attrsUrl of
-    [] -> ""
-    (x : xs) -> "?" <> x <> concatMap ('&' :) xs
-  where
-    attrsUrl =
-      catMaybes
-        [ (\i -> Just ("label_id=" <> show i)) =<< createBoard_label_id attrs,
-          (\i -> Just ("assignee_id=" <> show i)) =<< createBoard_assignee_id attrs,
-          (\i -> Just ("milestone_id=" <> show i)) =<< createBoard_milestone_id attrs
-        ]
+  catMaybes
+    [ (\i -> Just ("label_id", Just (T.encodeUtf8 (T.pack (show i))))) =<< createBoard_label_id attrs,
+      (\i -> Just ("assignee_id", Just (T.encodeUtf8 (T.pack (show i))))) =<< createBoard_assignee_id attrs,
+      (\i -> Just ("milestone_id", Just (T.encodeUtf8 (T.pack (show i))))) =<< createBoard_milestone_id attrs
+    ]

@@ -30,7 +30,8 @@ import UnliftIO.Async
 -- | gets all projects.
 allProjects :: GitLab [Project]
 allProjects =
-  gitlabWithAttrsUnsafe "/projects" "&statistics=true"
+  fromRight (error "allProjects error")
+    <$> gitlabGetMany "/projects" [("statistics", Just "true")]
 
 -- | gets all forks of a project. Supports use of namespaces.
 --
@@ -45,7 +46,7 @@ projectForks projectName = do
         "/projects/"
           <> T.decodeUtf8 (urlEncode False (T.encodeUtf8 projectName))
           <> "/forks"
-  gitlab urlPath
+  gitlabGetMany urlPath []
 
 -- | searches for a 'Project' with the given project ID, returns
 -- 'Nothing' if a project with the given ID is not found.
@@ -55,7 +56,7 @@ searchProjectId ::
   GitLab (Either (Response BSL.ByteString) (Maybe Project))
 searchProjectId projectId = do
   let urlPath = T.pack ("/projects/" <> show projectId)
-  gitlabWithAttrsOne urlPath "&statistics=true"
+  gitlabGetOne urlPath [("statistics", Just "true")]
 
 -- | gets all projects with the given project name.
 --
@@ -64,9 +65,13 @@ projectsWithName ::
   -- | project name being searched for.
   Text ->
   GitLab [Project]
-projectsWithName projectName =
-  filter (\project -> projectName == project_path project)
-    <$> gitlabWithAttrsUnsafe "/projects" ("&search=" <> projectName)
+projectsWithName projectName = do
+  results <- gitlabGetMany "/projects" [("search", Just (T.encodeUtf8 projectName))]
+  case results of
+    Left _ -> error "projectsWithName error"
+    Right projects ->
+      return $
+        filter (\project -> projectName == project_path project) projects
 
 -- | gets a project with the given name for the given username. E.g.
 --
@@ -75,12 +80,12 @@ projectsWithName projectName =
 -- looks for "user1/project1"
 projectsWithNameAndUser :: Text -> Text -> GitLab (Either (Response BSL.ByteString) (Maybe Project))
 projectsWithNameAndUser username projectName =
-  gitlabWithAttrsOne
+  gitlabGetOne
     ( "/projects/"
         <> T.decodeUtf8
           (urlEncode False (T.encodeUtf8 (username <> "/" <> projectName)))
     )
-    "&statistics=true"
+    [("statistics", Just "true")]
 
 -- | returns 'True' if a project has multiple committers, according to
 -- the email addresses of the commits.
@@ -115,7 +120,11 @@ userProjects' username = do
   userMaybe <- searchUser username
   case userMaybe of
     Nothing -> return Nothing
-    Just usr -> Just <$> gitlabUnsafe (urlPath (user_id usr))
+    Just usr -> do
+      result <- gitlabGetMany (urlPath (user_id usr)) []
+      case result of
+        Left _ -> error "userProjects' error"
+        Right projs -> return (Just projs)
   where
     urlPath usrId = "/users/" <> T.pack (show usrId) <> "/projects"
 
@@ -183,7 +192,7 @@ projectMemebersCount project = do
     count = do
       let addr =
             "/projects/" <> T.pack (show (project_id project)) <> "/members/all"
-      (res :: [Member]) <- gitlabUnsafe addr
+      (res :: [Member]) <- fromRight (error "projectMembersCount error") <$> gitlabGetMany addr []
       return (map (\x -> (member_username x, member_name x)) res)
 
 -- | returns 'True' is the last commit for a project passes all
@@ -219,13 +228,14 @@ projectDiffs proj =
 -- commit SHA.
 projectDiffs' :: Int -> Text -> GitLab (Either (Response BSL.ByteString) [Diff])
 projectDiffs' projId commitSha =
-  gitlab
+  gitlabGetMany
     ( "/projects/"
         <> T.pack (show projId)
         <> "/repository/commits/"
         <> commitSha
         <> "/diff/"
     )
+    []
 
 -- | add a group to a project.
 addGroupToProject ::
@@ -237,14 +247,13 @@ addGroupToProject ::
   AccessLevel ->
   GitLab (Either (Response BSL.ByteString) (Maybe GroupShare))
 addGroupToProject groupId projectId access =
-  gitlabPost addr dataBody
+  gitlabPost addr params
   where
-    dataBody :: Text
-    dataBody =
-      "group_id="
-        <> T.pack (show groupId)
-        <> "&group_access="
-        <> T.pack (show access)
+    params :: [GitLabParam]
+    params =
+      [ ("group_id", Just (T.encodeUtf8 (T.pack (show groupId)))),
+        ("group_access", Just (T.encodeUtf8 (T.pack (show access))))
+      ]
     addr =
       "/projects/"
         <> T.pack (show projectId)

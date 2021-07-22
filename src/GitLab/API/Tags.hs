@@ -32,7 +32,7 @@ tags' ::
   Int ->
   GitLab (Either (Response BSL.ByteString) [Tag])
 tags' projectId = do
-  gitlabWithAttrs (commitsAddr projectId) ""
+  gitlabGetMany (commitsAddr projectId) []
   where
     commitsAddr :: Int -> Text
     commitsAddr projId =

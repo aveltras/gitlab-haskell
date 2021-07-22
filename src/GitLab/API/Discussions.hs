@@ -42,4 +42,4 @@ commitDiscussions' projId commitHash = do
             <> "/commits/"
             <> T.unpack commitHash
             <> "/discussions"
-  gitlab urlPath
+  gitlabGetMany urlPath []

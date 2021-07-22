@@ -12,8 +12,8 @@ module GitLab.API.Members where
 
 import qualified Data.ByteString.Lazy as BSL
 import Data.Either
-import Data.Text (Text)
 import qualified Data.Text as T
+import qualified Data.Text.Encoding as T
 import GitLab.Types
 import GitLab.WebRequests.GitLabWebCalls
 import Network.HTTP.Client
@@ -42,7 +42,7 @@ membersOfProject p = do
 -- | the members of a project given its ID.
 membersOfProject' :: Int -> GitLab (Either (Response BSL.ByteString) [Member])
 membersOfProject' projectId =
-  gitlab addr
+  gitlabGetMany addr []
   where
     addr =
       "/projects/" <> T.pack (show projectId) <> "/members"
@@ -73,11 +73,13 @@ addMemberToProject' ::
   Int ->
   GitLab (Either (Response BSL.ByteString) (Maybe Member))
 addMemberToProject' projectId access userId =
-  gitlabPost addr dataBody
+  gitlabPost addr params
   where
-    dataBody :: Text
-    dataBody =
-      "user_id=" <> T.pack (show userId) <> "&access_level=" <> T.pack (show access)
+    params :: [GitLabParam]
+    params =
+      [ ("user_id", Just (T.encodeUtf8 (T.pack (show userId)))),
+        ("access_level", Just (T.encodeUtf8 (T.pack (show access))))
+      ]
     addr =
       "/projects/" <> T.pack (show projectId) <> "/members"
 

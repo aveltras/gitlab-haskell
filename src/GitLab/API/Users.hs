@@ -10,10 +10,12 @@
 -- Stability   : stable
 module GitLab.API.Users where
 
+import Data.Either
 import Data.List
 import Data.Maybe
 import Data.Text (Text)
 import qualified Data.Text as T
+import qualified Data.Text.Encoding as T
 import GitLab.Types
 import GitLab.WebRequests.GitLabWebCalls
 
@@ -21,7 +23,7 @@ import GitLab.WebRequests.GitLabWebCalls
 allUsers :: GitLab [User]
 allUsers = do
   let path = "/users"
-  gitlabUnsafe path
+  fromRight (error "allUsers error") <$> gitlabGetMany path []
 
 -- | searches for a user given a user ID. Returns @Just User@ if the
 -- user is found, otherwise @Nothing@.
@@ -33,7 +35,7 @@ userId usrId = do
   let path =
         "/users/"
           <> T.pack (show usrId)
-  res <- gitlabOne path
+  res <- gitlabGetOne path []
   case res of
     Left _err -> return Nothing
     Right Nothing -> return Nothing
@@ -47,11 +49,12 @@ searchUser ::
   GitLab (Maybe User)
 searchUser username = do
   let path = "/users"
-      attrs = "&username=" <> username
-  res <- gitlabWithAttrsUnsafe path attrs
-  case res of
-    [] -> return Nothing
-    (user : _) -> return (Just user)
+      params = [("username", Just (T.encodeUtf8 username))]
+  result <- gitlabGetMany path params
+  case result of
+    Left _err -> return Nothing
+    Right [] -> return Nothing
+    Right (x : _) -> return (Just x)
 
 -- | searches for users given a list of usernames, returns them in
 -- alphabetical order of their usernames.

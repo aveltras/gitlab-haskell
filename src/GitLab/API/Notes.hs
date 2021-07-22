@@ -12,6 +12,7 @@ module GitLab.API.Notes where
 import qualified Data.ByteString.Lazy as BSL
 import Data.Text (Text)
 import qualified Data.Text as T
+import qualified Data.Text.Encoding as T
 import GitLab.Types
 import GitLab.WebRequests.GitLabWebCalls
 import Network.HTTP.Client
@@ -36,17 +37,14 @@ createMergeRequestNote' ::
   Text ->
   GitLab (Either (Response BSL.ByteString) (Maybe ()))
 createMergeRequestNote' projectId mergeRequestIID comment =
-  gitlabPost addr dataBody
+  gitlabPost addr params
   where
-    dataBody :: Text
-    dataBody =
-      T.pack $
-        "id="
-          <> show projectId
-          <> "&merge_request_iid="
-          <> show mergeRequestIID
-          <> "&body="
-          <> T.unpack comment
+    params :: [GitLabParam]
+    params =
+      [ ("id", Just (T.encodeUtf8 (T.pack (show projectId)))),
+        ("merge_request_iid", Just (T.encodeUtf8 (T.pack (show mergeRequestIID)))),
+        ("body", Just (T.encodeUtf8 comment))
+      ]
     addr =
       T.pack $
         "/projects/" <> show projectId <> "/merge_requests/"

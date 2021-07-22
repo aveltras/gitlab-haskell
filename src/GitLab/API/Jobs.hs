@@ -31,7 +31,7 @@ jobs' ::
   Int ->
   GitLab (Either (Response BSL.ByteString) [Job])
 jobs' projectId =
-  gitlab addr
+  gitlabGetMany addr []
   where
     addr =
       "/projects/"

@@ -32,7 +32,7 @@ repositories' ::
   Int ->
   GitLab (Either (Response BSL.ByteString) [Repository])
 repositories' projectId =
-  gitlab addr
+  gitlabGetMany addr []
   where
     addr =
       "/projects/"
@@ -63,7 +63,12 @@ getFileArchiveBS ::
   -- | file format
   ArchiveFormat ->
   GitLab (Either (Response BSL.ByteString) BSL.ByteString)
-getFileArchiveBS project = getFileArchiveBS' (project_id project)
+getFileArchiveBS project format = do
+  result <- getFileArchiveBS' (project_id project) format
+  case result of
+    Left resp -> return (Left resp)
+    Right Nothing -> error "could not download file"
+    Right (Just bs) -> return (Right bs)
 
 -- | get a file archive of the repository files using the project's
 --   ID. For example:
@@ -81,7 +86,9 @@ getFileArchive' projectId format fPath = do
   attempt <- getFileArchiveBS' projectId format
   case attempt of
     Left st -> return (Left st)
-    Right archiveData ->
+    Right Nothing ->
+      Right <$> error "cannot download file"
+    Right (Just archiveData) ->
       Right <$> liftIO (BSL.writeFile fPath archiveData)
 
 -- | get a file archive of the repository files as a 'BSL.ByteString'
@@ -93,9 +100,12 @@ getFileArchiveBS' ::
   Int ->
   -- | file format
   ArchiveFormat ->
-  GitLab (Either (Response BSL.ByteString) BSL.ByteString)
-getFileArchiveBS' projectId format =
-  gitlabReqByteString addr
+  GitLab (Either (Response BSL.ByteString) (Maybe BSL.ByteString))
+getFileArchiveBS' projectId format = do
+  result <- gitlabGetOne addr [] :: GitLab (Either (Response BSL.ByteString) (Maybe Bool))
+  case result of
+    Left response -> return (Right (Just (responseBody response)))
+    Right _b -> error "impossible" -- we're asking it to parse BS as a Bool, which shouldn't be possible.
   where
     addr =
       "/projects/"

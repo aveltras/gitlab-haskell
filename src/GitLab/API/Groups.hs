@@ -30,7 +30,7 @@ groupsWithNameOrPath ::
   Text ->
   GitLab (Either (Response BSL.ByteString) [Group])
 groupsWithNameOrPath groupName = do
-  result <- gitlabWithAttrs "/groups" ("&search=" <> groupName)
+  result <- gitlabGetMany "/groups" [("search", Just (T.encodeUtf8 groupName))]
   case result of
     Left {} -> return result
     Right groups ->
@@ -87,12 +87,13 @@ addUserToGroup' groupName access usrId = do
     -- return (Left (mk (Response BSL.ByteString) 404 (T.encodeUtf8 (T.pack "cannot find group"))))
     -- return (Left (mk (Response (T.encodeUtf8 (T.pack "cannot find group"))))
     Right [grp] ->
-      gitlabPost addr dataBody
+      gitlabPost addr params
       where
-        dataBody :: Text
-        dataBody =
-          "user_id=" <> T.pack (show usrId) <> "&access_level="
-            <> T.pack (show access)
+        params :: [GitLabParam]
+        params =
+          [ ("user_id", Just (T.encodeUtf8 (T.pack (show usrId)))),
+            ("access_level", Just (T.encodeUtf8 (T.pack (show access))))
+          ]
         addr =
           "/groups/"
             <> T.decodeUtf8 (urlEncode False (T.encodeUtf8 (T.pack (show (group_id grp)))))
@@ -146,4 +147,4 @@ groupProjects' groupID = do
           "/groups/"
             <> show groupID
             <> "/projects"
-  gitlab urlPath
+  gitlabGetMany urlPath []

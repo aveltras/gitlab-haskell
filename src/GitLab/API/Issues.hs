@@ -31,14 +31,12 @@ module GitLab.API.Issues
   )
 where
 
-import qualified Data.Aeson as J
 import qualified Data.ByteString.Lazy as BSL
 import Data.Either
 import Data.Maybe
 import Data.Text (Text)
 import qualified Data.Text as T
-import qualified Data.Text.Lazy
-import qualified Data.Text.Lazy.Encoding
+import qualified Data.Text.Encoding as T
 import Data.Time.Clock
 import Data.Time.Format.ISO8601
 import GitLab.Types
@@ -141,14 +139,13 @@ projectIssues' ::
   -- | the GitLab issues
   GitLab (Either (Response BSL.ByteString) [Issue])
 projectIssues' projectId attrs =
-  gitlab urlPath
+  gitlabGetMany urlPath (issuesAttrs attrs)
   where
     urlPath =
       T.pack $
         "/projects/"
           <> show projectId
           <> "/issues"
-          <> issuesAttrs attrs
 
 -- | Gets issues count statistics on all issues the authenticated user has access to.
 issueStatisticsUser ::
@@ -157,12 +154,11 @@ issueStatisticsUser ::
   -- | the issue statistics
   GitLab IssueStatistics
 issueStatisticsUser attrs =
-  gitlabOneUnsafe urlPath
+  gitlabUnsafe (gitlabGetOne urlPath (issuesAttrs attrs))
   where
     urlPath =
       T.pack $
         "/issues_statistics"
-          <> issuesAttrs attrs
 
 -- | Gets issues count statistics for a given group.
 issueStatisticsGroup ::
@@ -188,14 +184,13 @@ issueStatisticsGroup' ::
   -- | the issue statistics
   GitLab (Either (Response BSL.ByteString) (Maybe IssueStatistics))
 issueStatisticsGroup' groupId attrs =
-  gitlabOne urlPath
+  gitlabGetOne urlPath (issuesAttrs attrs)
   where
     urlPath =
       T.pack $
         "/groups/"
           <> show groupId
           <> "/issues_statistics"
-          <> issuesAttrs attrs
 
 -- | Gets issues count statistics for a given group.
 issueStatisticsProject ::
@@ -221,14 +216,13 @@ issueStatisticsProject' ::
   -- | the issue statistics
   GitLab (Either (Response BSL.ByteString) (Maybe IssueStatistics))
 issueStatisticsProject' projId attrs =
-  gitlabOne urlPath
+  gitlabGetOne urlPath (issuesAttrs attrs)
   where
     urlPath =
       T.pack $
         "/projects/"
           <> show projId
           <> "/issues_statistics"
-          <> issuesAttrs attrs
 
 -- | gets all issues create by a user.
 userIssues ::
@@ -236,14 +230,14 @@ userIssues ::
   User ->
   GitLab [Issue]
 userIssues usr =
-  gitlabWithAttrsUnsafe addr attrs
+  fromRight (error "userIssues error") <$> gitlabGetMany addr params
   where
     addr = "/issues"
-    attrs =
-      T.pack $
-        "&author_id="
-          <> show (user_id usr)
-          <> "&scope=all"
+    params :: [GitLabParam]
+    params =
+      [ ("author_id", Just (T.encodeUtf8 (T.pack (show (user_id usr))))),
+        ("scope", Just "all")
+      ]
 
 -- | create a new issue.
 newIssue ::
@@ -269,12 +263,11 @@ newIssue' ::
 newIssue' projectId issueTitle issueDescription =
   gitlabPost addr dataBody
   where
-    dataBody :: Text
+    dataBody :: [GitLabParam]
     dataBody =
-      "title="
-        <> issueTitle
-        <> "&description="
-        <> issueDescription
+      [ ("title", Just (T.encodeUtf8 issueTitle)),
+        ("description", Just (T.encodeUtf8 issueDescription))
+      ]
     addr =
       "/projects/"
         <> T.pack (show projectId)
@@ -291,13 +284,14 @@ editIssue projId issueId editIssueReq = do
         "/projects/" <> T.pack (show projId)
           <> "/issues/"
           <> T.pack (show issueId)
-  gitlabPut
-    urlPath
-    ( Data.Text.Lazy.toStrict
-        ( Data.Text.Lazy.Encoding.decodeUtf8
-            (J.encode editIssueReq)
-        )
-    )
+  result <-
+    gitlabPut
+      urlPath
+      (editIssuesAttrs editIssueReq)
+  case result of
+    Left resp -> return (Left resp)
+    Right Nothing -> error "editIssue error"
+    Right (Just issue) -> return (Right issue)
 
 -------------------------------
 -- Internal functions and types
@@ -329,42 +323,66 @@ data IssueAttrs = IssueAttrs
     issueFilter_with_labels_details :: Maybe Bool
   }
 
-issuesAttrs :: IssueAttrs -> String
-issuesAttrs filters =
-  case attrsUrl of
-    [] -> ""
-    (x : xs) -> "?" <> x <> concatMap ('&' :) xs
+editIssuesAttrs :: EditIssueReq -> [GitLabParam]
+editIssuesAttrs filters =
+  catMaybes
+    [ Just ("id", textToBS (T.pack (show (edit_issue_id filters)))),
+      Just ("issue_id", textToBS (T.pack (show (edit_issue_issue_iid filters)))),
+      -- (\i -> Just ("assignee_id", textToBS (T.pack (show i)))) =<< edit_issue_issue_id filters,
+      (\t -> Just ("title", textToBS t)) =<< edit_issue_title filters,
+      (\t -> Just ("description", textToBS t)) =<< edit_issue_description filters,
+      (\b -> Just ("confidential", textToBS (showBool b))) =<< edit_issue_confidential filters,
+      -- TODO
+      -- (\is -> Just ("assignee_ids", textToBS )) =<< edit_issue_assignee_ids filters,
+      (\i -> Just ("milestone_id", textToBS (T.pack (show i)))) =<< edit_issue_milestone_id filters,
+      -- TODO
+      -- (\ts -> Just ("labels", textToBS (T.pack (show i)))) =<< edit_issue_labels filters,
+      (\t -> Just ("state_event", textToBS t)) =<< edit_issue_state_event filters,
+      (\t -> Just ("updated_at", textToBS t)) =<< edit_issue_updated_at filters,
+      (\t -> Just ("due_date", textToBS t)) =<< edit_issue_due_date filters,
+      (\i -> Just ("weight", textToBS (T.pack (show i)))) =<< edit_issue_weight filters,
+      (\b -> Just ("discussion_locked", textToBS (showBool b))) =<< edit_issue_discussion_locked filters,
+      (\i -> Just ("epic_id", textToBS (T.pack (show i)))) =<< edit_issue_epic_id filters,
+      (\i -> Just ("epic_iid", textToBS (T.pack (show i)))) =<< edit_issue_epic_iid filters
+    ]
   where
-    attrsUrl =
-      catMaybes
-        [ (\i -> Just ("assignee_id=" <> show i)) =<< issueFilter_assignee_id filters,
-          (\t -> Just ("assignee_username=" <> t)) =<< issueFilter_assignee_username filters,
-          (\i -> Just ("author_id=" <> show i)) =<< issueFilter_author_id filters,
-          (\i -> Just ("author_username=" <> show i)) =<< issueFilter_author_username filters,
-          (\b -> Just ("confidential=" <> showBool b)) =<< issueFilter_confidential filters,
-          (\t -> Just ("created_after=" <> showTime t)) =<< issueFilter_created_after filters,
-          (\t -> Just ("created_before=" <> showTime t)) =<< issueFilter_created_before filters,
-          (\due -> Just ("due_date=" <> show due)) =<< issueFilter_due_date filters,
-          (\iids -> Just ("iids[]=" <> show iids)) =<< issueFilter_iids filters,
-          (\issueIn -> Just ("assignee_id=" <> show issueIn)) =<< issueFilter_in filters,
-          (\i -> Just ("iteration_id=" <> show i)) =<< issueFilter_iteration_id filters,
-          (\s -> Just ("iteration_title=" <> s)) =<< issueFilter_iteration_title filters,
-          (\s -> Just ("milestone=" <> s)) =<< issueFilter_milestone filters,
-          (\s -> Just ("labels=" <> s)) =<< issueFilter_labels filters,
-          (\s -> Just ("my_reaction_emoji=" <> s)) =<< issueFilter_my_reaction_emoji filters,
-          (\b -> Just ("non_archived=" <> showBool b)) =<< issueFilter_non_archived filters,
-          (\x -> Just ("order_by=" <> show x)) =<< issueFilter_order_by filters,
-          (\x -> Just ("scope=" <> show x)) =<< issueFilter_scope filters,
-          (\s -> Just ("search=" <> s)) =<< issueFilter_search filters,
-          (\x -> Just ("sort=" <> show x)) =<< issueFilter_sort filters,
-          (\x -> Just ("state=" <> show x)) =<< issueFilter_state filters,
-          (\t -> Just ("updated_after=" <> showTime t)) =<< issueFilter_updated_after filters,
-          (\t -> Just ("updated_before=" <> showTime t)) =<< issueFilter_updated_before filters,
-          (\b -> Just ("with_labels_details=" <> showBool b)) =<< issueFilter_with_labels_details filters
-        ]
-      where
-        showBool :: Bool -> String
-        showBool True = "true"
-        showBool False = "false"
-        showTime :: UTCTime -> String
-        showTime = iso8601Show
+    textToBS = Just . T.encodeUtf8
+    showBool :: Bool -> Text
+    showBool True = "true"
+    showBool False = "false"
+
+issuesAttrs :: IssueAttrs -> [GitLabParam]
+issuesAttrs filters =
+  catMaybes
+    [ (\i -> Just ("assignee_id", textToBS (T.pack (show i)))) =<< issueFilter_assignee_id filters,
+      (\t -> Just ("assignee_username", textToBS (T.pack t))) =<< issueFilter_assignee_username filters,
+      (\i -> Just ("author_id", textToBS (T.pack (show i)))) =<< issueFilter_author_id filters,
+      (\i -> Just ("author_username", textToBS ((T.pack (show i))))) =<< issueFilter_author_username filters,
+      (\b -> Just ("confidential", textToBS (showBool b))) =<< issueFilter_confidential filters,
+      (\t -> Just ("created_after", textToBS (showTime t))) =<< issueFilter_created_after filters,
+      (\t -> Just ("created_before", textToBS (showTime t))) =<< issueFilter_created_before filters,
+      (\due -> Just ("due_date", textToBS (T.pack (show due)))) =<< issueFilter_due_date filters,
+      (\iids -> Just ("iids[]", textToBS (T.pack (show iids)))) =<< issueFilter_iids filters,
+      (\issueIn -> Just ("assignee_id", textToBS (T.pack (show issueIn)))) =<< issueFilter_in filters,
+      (\i -> Just ("iteration_id", textToBS (T.pack (show i)))) =<< issueFilter_iteration_id filters,
+      (\s -> Just ("iteration_title", textToBS (T.pack s))) =<< issueFilter_iteration_title filters,
+      (\s -> Just ("milestone", textToBS (T.pack s))) =<< issueFilter_milestone filters,
+      (\s -> Just ("labels", textToBS (T.pack s))) =<< issueFilter_labels filters,
+      (\s -> Just ("my_reaction_emoji", textToBS (T.pack s))) =<< issueFilter_my_reaction_emoji filters,
+      (\b -> Just ("non_archived", textToBS (showBool b))) =<< issueFilter_non_archived filters,
+      (\x -> Just ("order_by", textToBS (T.pack (show x)))) =<< issueFilter_order_by filters,
+      (\x -> Just ("scope", textToBS (T.pack (show x)))) =<< issueFilter_scope filters,
+      (\s -> Just ("search", textToBS (T.pack s))) =<< issueFilter_search filters,
+      (\x -> Just ("sort", textToBS (T.pack (show x)))) =<< issueFilter_sort filters,
+      (\x -> Just ("state", textToBS (T.pack (show x)))) =<< issueFilter_state filters,
+      (\t -> Just ("updated_after", textToBS (showTime t))) =<< issueFilter_updated_after filters,
+      (\t -> Just ("updated_before", textToBS (showTime t))) =<< issueFilter_updated_before filters,
+      (\b -> Just ("with_labels_details", textToBS (showBool b))) =<< issueFilter_with_labels_details filters
+    ]
+  where
+    textToBS = Just . T.encodeUtf8
+    showBool :: Bool -> Text
+    showBool True = "true"
+    showBool False = "false"
+    showTime :: UTCTime -> Text
+    showTime = T.pack . iso8601Show

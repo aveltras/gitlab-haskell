@@ -13,6 +13,7 @@ import qualified Data.ByteString.Lazy as BSL
 import Data.Either
 import Data.Text (Text)
 import qualified Data.Text as T
+import qualified Data.Text.Encoding as T
 import GitLab.Types
 import GitLab.WebRequests.GitLabWebCalls
 import Network.HTTP.Client
@@ -33,7 +34,7 @@ projectCommits' ::
   Int ->
   GitLab (Either (Response BSL.ByteString) [Commit])
 projectCommits' projectId =
-  gitlabWithAttrs (commitsAddr projectId) "&with_stats=true"
+  gitlabGetMany (commitsAddr projectId) [("with_stats", Just "true")]
   where
     commitsAddr :: Int -> Text
     commitsAddr projId =
@@ -60,7 +61,7 @@ branchCommits' ::
   Text ->
   GitLab (Either (Response BSL.ByteString) [Commit])
 branchCommits' projectId branchName = do
-  gitlabWithAttrs (commitsAddr projectId) ("&ref_name=" <> branchName)
+  gitlabGetMany (commitsAddr projectId) [("ref_name", Just (T.encodeUtf8 branchName))]
   where
     commitsAddr :: Int -> Text
     commitsAddr projId =
@@ -87,7 +88,7 @@ commitDetails' ::
   Text ->
   GitLab (Either (Response BSL.ByteString) (Maybe Commit))
 commitDetails' projectId hash =
-  gitlabOne (commitsAddr projectId)
+  gitlabGetOne (commitsAddr projectId) []
   where
     commitsAddr :: Int -> Text
     commitsAddr projId =

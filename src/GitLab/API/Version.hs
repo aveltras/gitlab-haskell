@@ -18,4 +18,4 @@ import Network.HTTP.Client
 gitlabVersion :: GitLab (Either (Response BSL.ByteString) (Maybe Version))
 gitlabVersion = do
   let urlPath = "/version"
-  gitlabOne urlPath
+  gitlabGetOne urlPath []

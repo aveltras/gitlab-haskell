@@ -40,7 +40,7 @@ repositoryFiles' ::
   Text ->
   GitLab (Either (Response BSL.ByteString) (Maybe RepositoryFile))
 repositoryFiles' projectId filePath reference =
-  gitlabWithAttrsOne addr ("&ref=" <> reference)
+  gitlabGetOne addr [("ref", Just (T.encodeUtf8 reference))]
   where
     addr =
       "/projects/"
@@ -56,9 +56,9 @@ repositoryFileBlob ::
   Int ->
   -- | blob SHA
   Text ->
-  GitLab (Either (Response BSL.ByteString) String)
+  GitLab (Either (Response BSL.ByteString) (Maybe String))
 repositoryFileBlob projectId blobSha =
-  gitlabReqText addr
+  gitlabGetOne addr []
   where
     addr =
       "/projects/"

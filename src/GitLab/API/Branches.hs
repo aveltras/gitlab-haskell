@@ -27,7 +27,7 @@ branches project = do
 -- project ID, sorted by name alphabetically.
 branches' :: Int -> GitLab (Either (Response BSL.ByteString) [Branch])
 branches' projectId =
-  gitlab addr
+  gitlabGetMany addr []
   where
     addr =
       "/projects/"

@@ -31,9 +31,9 @@ pipelines' ::
   Int ->
   GitLab (Either (Response BSL.ByteString) [Pipeline])
 pipelines' projectId =
-  gitlabWithAttrs
+  gitlabGetMany
     addr
-    "&sort=desc" -- most recent first
+    [("sort", Just "desc")] -- most recent first
   where
     addr =
       "/projects/"
